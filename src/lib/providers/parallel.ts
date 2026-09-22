@@ -20,6 +20,7 @@ import type { SearchProvider, SearchOptions, ProviderSearchResponse, SearchResul
 import { proxiedFetch } from '@/lib/corsProxy';
 import { textOnly, toEngineQuery } from '@/lib/queryParser';
 import { getEngineSearchStatus } from '@/lib/engineSearch';
+import { ENGINE_SEARCH_BASE } from '@/lib/aiConfig';
 
 const LS_PARALLEL_KEY = 'presearchstr:parallel-api-key';
 const API_URL = 'https://api.parallel.ai/v1/search';
@@ -179,7 +180,7 @@ export const parallelProvider: SearchProvider = {
       // Engine tier: same-origin proxy, no key in the browser. BYOK tier:
       // the user's own key to Parallel via the CORS proxy.
       const res = viaEngine
-        ? await fetch('/api/search/parallel', {
+        ? await fetch(`${ENGINE_SEARCH_BASE}/parallel`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify(body),

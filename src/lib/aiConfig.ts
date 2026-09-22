@@ -28,8 +28,34 @@ import type { EngineAIStatus } from '@/lib/ai/engineProxy';
 
 export type { EngineAIStatus } from '@/lib/ai/engineProxy';
 
-/** Same-origin base of the engine-AI proxy (served by worker.ts). */
-export const ENGINE_AI_BASE = '/api/ai';
+/**
+ * Base of the engine-AI proxy (worker.ts).
+ *
+ * Resolution order:
+ *   1. VITE_ENGINE_API_BASE build var (non-secret) — explicit override.
+ *   2. On presearchstr.com / www.presearchstr.com (static hosting, no
+ *      same-origin worker): the deployed engine worker at
+ *      presearchstr.presearchstr.workers.dev.
+ *   3. Everywhere else (forks, localhost, wrangler co-located deploys):
+ *      same-origin `/api/ai`, exactly as before.
+ *
+ * The worker reflects an allowlisted Origin, so cross-origin calls carry
+ * no cookies and expose no keys.
+ */
+const PROD_ENGINE_BASE = 'https://presearchstr.presearchstr.workers.dev/api/ai';
+
+function defaultEngineBase(): string {
+  if (typeof location !== 'undefined' && /^(www\.)?presearchstr\.com$/.test(location.hostname)) {
+    return PROD_ENGINE_BASE;
+  }
+  return '/api/ai';
+}
+
+export const ENGINE_AI_BASE: string =
+  (import.meta.env.VITE_ENGINE_API_BASE as string | undefined)?.replace(/\/$/, '') || defaultEngineBase();
+
+/** Base of the engine search proxy (/api/search/* on the same worker). */
+export const ENGINE_SEARCH_BASE = `${ENGINE_AI_BASE.replace(/\/ai$/, '')}/search`;
 
 /** Built-in free tier — shared, rate-limited PPQ key. Provider + model are
  *  locked on this tier. PUBLIC BY DESIGN (ships in the bundle): it exists so

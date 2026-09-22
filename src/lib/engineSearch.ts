@@ -13,6 +13,8 @@
  * and both providers report unconfigured, so everything degrades to BYOK.
  */
 
+import { ENGINE_SEARCH_BASE } from '@/lib/aiConfig';
+
 export interface EngineSearchStatus {
   brave: boolean;
   parallel: boolean;
@@ -29,7 +31,7 @@ export function getEngineSearchStatus(): Promise<EngineSearchStatus> {
   if (cached && Date.now() - cachedAt < 5 * 60_000) return Promise.resolve(cached);
   if (inflight) return inflight;
 
-  inflight = fetch('/api/search/status', { headers: { Accept: 'application/json' } })
+  inflight = fetch(`${ENGINE_SEARCH_BASE}/status`, { headers: { Accept: 'application/json' } })
     .then(async (res) => {
       if (!res.ok) return NONE;
       const data = (await res.json()) as Partial<EngineSearchStatus>;

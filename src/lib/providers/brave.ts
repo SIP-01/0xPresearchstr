@@ -19,6 +19,7 @@ import { getWebEngineBases } from './enginePriority';
 import { braveLanguageParam } from '@/lib/languageFilter';
 import { toEngineQuery } from '@/lib/queryParser';
 import { getEngineSearchStatus } from '@/lib/engineSearch';
+import { ENGINE_SEARCH_BASE } from '@/lib/aiConfig';
 const LS_BRAVE_KEY = 'presearchstr:brave-api-key';
 const API_URL = 'https://api.search.brave.com/res/v1/web/search';
 
@@ -94,7 +95,7 @@ export const braveProvider: SearchProvider = {
       // Engine tier: same-origin proxy, no key in the browser. BYOK tier:
       // the user's own key to Brave via the CORS proxy.
       const res = viaEngine
-        ? await fetch(`/api/search/brave?${params}`, {
+        ? await fetch(`${ENGINE_SEARCH_BASE}/brave?${params}`, {
             signal,
             headers: { Accept: 'application/json' },
           })

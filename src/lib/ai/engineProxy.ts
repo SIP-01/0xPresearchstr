@@ -46,6 +46,9 @@ export interface EngineAIEnv {
   /** Public key (hex) allowed to administer engine AI. Not a secret. */
   OWNER_PUBKEY?: string;
   /** Env-var fallback config (secrets set via `wrangler secret put`). */
+  /** Canonical secret name (matches Dsearch / 0xsigner convention). */
+  OPENAI_API_KEY?: string;
+  /** Legacy alias for OPENAI_API_KEY. */
   AI_API_KEY?: string;
   AI_PROVIDER_ENDPOINT?: string;
   AI_MODEL?: string;
@@ -67,7 +70,8 @@ export const DEFAULT_ENGINE_ENDPOINT = 'https://api.ppq.ai/v1';
 /* ------------------------------------------------------------------ */
 
 function configFromEnv(env: EngineAIEnv): EngineAIConfig | null {
-  const apiKey = env.AI_API_KEY?.trim();
+  // Canonical secret name is OPENAI_API_KEY; AI_API_KEY is the legacy alias.
+  const apiKey = env.OPENAI_API_KEY?.trim() || env.AI_API_KEY?.trim();
   if (!apiKey) return null;
   return {
     enabled: env.AI_ENGINE_ENABLED !== 'false',

@@ -52,13 +52,53 @@ interface Env extends EngineAIEnv {
   PARALLEL_API_KEY?: string;
 }
 
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
+/**
+ * Origins allowed to call the API cross-origin (CORS). The worker reflects
+ * the request Origin only when it is allowlisted — never `*` — and API
+ * responses carry no cookies, so cross-origin calls are bearer-less by
+ * design. The engine keys stay server-side regardless; CORS here only
+ * governs which sites may embed the public API, not access to secrets.
+ */
+const ALLOWED_ORIGINS = new Set([
+  'https://presearchstr.com',
+  'https://www.presearchstr.com',
+  'http://localhost:8080',
+  'http://localhost:5173',
+  'http://127.0.0.1:8080',
+]);
+
+function corsOrigin(request: Request): string | null {
+  const origin = request.headers.get('Origin');
+  if (!origin) return null; // same-origin / non-browser request — no CORS needed
+  return ALLOWED_ORIGINS.has(origin) ? origin : null;
+}
+
+function json(data: unknown, status = 200, request?: Request): Response {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    // Never cache a response derived from server-side config.
+    'Cache-Control': 'no-store',
+  };
+  const origin = request ? corsOrigin(request) : null;
+  if (origin) {
+    headers['Access-Control-Allow-Origin'] = origin;
+    headers['Vary'] = 'Origin';
+  }
+  return new Response(JSON.stringify(data), { status, headers });
+}
+
+/** Answer CORS preflights for the API routes (allowlisted origins only). */
+function handleOptions(request: Request): Response {
+  const origin = corsOrigin(request);
+  if (!origin) return new Response(null, { status: 403 });
+  return new Response(null, {
+    status: 204,
     headers: {
-      'Content-Type': 'application/json',
-      // Never cache a response derived from server-side config.
-      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+      Vary: 'Origin',
     },
   });
 }
@@ -83,24 +123,24 @@ function rateLimited(ip: string): boolean {
 async function proxyChat(request: Request, env: Env): Promise<Response> {
   const config = await readEngineConfig(env);
   if (!config || !config.enabled) {
-    return json({ error: { message: 'Engine AI is not configured on this deployment', type: 'unavailable' } }, 503);
+    return json({ error: { message: 'Engine AI is not configured on this deployment', type: 'unavailable' } }, 503, request);
   }
 
   const ip = request.headers.get('CF-Connecting-IP') ?? 'anonymous';
   if (rateLimited(ip)) {
-    return json({ error: { message: 'Rate limit exceeded — slow down', type: 'rate_limited' } }, 429);
+    return json({ error: { message: 'Rate limit exceeded — slow down', type: 'rate_limited' } }, 429, request);
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return json({ error: { message: 'Body must be JSON', type: 'invalid_request' } }, 400);
+    return json({ error: { message: 'Body must be JSON', type: 'invalid_request' } }, 400, request);
   }
 
   const payload = validateChatPayload(body);
   if (typeof payload === 'string') {
-    return json({ error: { message: payload, type: 'invalid_request' } }, 400);
+    return json({ error: { message: payload, type: 'invalid_request' } }, 400, request);
   }
 
   const upstream = await fetch(`${config.endpoint.replace(/\/$/, '')}/chat/completions`, {
@@ -114,7 +154,7 @@ async function proxyChat(request: Request, env: Env): Promise<Response> {
   }).catch(() => null);
 
   if (!upstream) {
-    return json({ error: { message: 'AI provider unreachable', type: 'upstream_unavailable' } }, 502);
+    return json({ error: { message: 'AI provider unreachable', type: 'upstream_unavailable' } }, 502, request);
   }
 
   if (!upstream.ok) {
@@ -124,18 +164,19 @@ async function proxyChat(request: Request, env: Env): Promise<Response> {
     return json(
       { error: { message: sanitizeProviderError(upstream.status), type: 'provider_error' } },
       upstream.status === 429 ? 429 : 502,
+      request,
     );
   }
 
   const data = await upstream.json();
-  return json(data);
+  return json(data, 200, request);
 }
 
 /** Proxied model list for the admin "Load models" helper. */
-async function proxyModels(env: Env): Promise<Response> {
+async function proxyModels(env: Env, request: Request): Promise<Response> {
   const config = await readEngineConfig(env);
   if (!config) {
-    return json({ error: { message: 'Engine AI is not configured', type: 'unavailable' } }, 503);
+    return json({ error: { message: 'Engine AI is not configured', type: 'unavailable' } }, 503, request);
   }
 
   const upstream = await fetch(`${config.endpoint.replace(/\/$/, '')}/models`, {
@@ -145,10 +186,10 @@ async function proxyModels(env: Env): Promise<Response> {
 
   if (!upstream || !upstream.ok) {
     await upstream?.body?.cancel().catch(() => undefined);
-    return json({ error: { message: 'Could not load models from the provider', type: 'provider_error' } }, 502);
+    return json({ error: { message: 'Could not load models from the provider', type: 'provider_error' } }, 502, request);
   }
 
-  return json(await upstream.json());
+  return json(await upstream.json(), 200, request);
 }
 
 /* ------------------------------------------------------------------ */
@@ -156,26 +197,26 @@ async function proxyModels(env: Env): Promise<Response> {
 /* ------------------------------------------------------------------ */
 
 /** Public status: which engine search providers are configured. Booleans only. */
-function searchStatus(env: Env): Response {
+function searchStatus(env: Env, request: Request): Response {
   return json({
     brave: typeof env.BRAVE_API_KEY === 'string' && env.BRAVE_API_KEY.length > 0,
     parallel: typeof env.PARALLEL_API_KEY === 'string' && env.PARALLEL_API_KEY.length > 0,
-  });
+  }, 200, request);
 }
 
 /** GET /api/search/brave?q=…&count=…&search_lang=… — Brave proxy, key injected here. */
 async function proxyBrave(request: Request, env: Env): Promise<Response> {
   if (!env.BRAVE_API_KEY) {
-    return json({ error: { message: 'Engine Brave is not configured on this deployment', type: 'unavailable' } }, 503);
+    return json({ error: { message: 'Engine Brave is not configured on this deployment', type: 'unavailable' } }, 503, request);
   }
   const ip = `${request.headers.get('CF-Connecting-IP') ?? 'anonymous'}:search`;
   if (rateLimited(ip)) {
-    return json({ error: { message: 'Rate limit exceeded — slow down', type: 'rate_limited' } }, 429);
+    return json({ error: { message: 'Rate limit exceeded — slow down', type: 'rate_limited' } }, 429, request);
   }
 
   const url = new URL(request.url);
   const q = (url.searchParams.get('q') ?? '').trim().slice(0, 400);
-  if (!q) return json({ error: { message: 'Missing q', type: 'invalid_request' } }, 400);
+  if (!q) return json({ error: { message: 'Missing q', type: 'invalid_request' } }, 400, request);
   const count = Math.min(Math.max(parseInt(url.searchParams.get('count') ?? '10', 10) || 10, 1), 20);
 
   const upstream = new URL('https://api.search.brave.com/res/v1/web/search');
@@ -192,29 +233,29 @@ async function proxyBrave(request: Request, env: Env): Promise<Response> {
     signal: AbortSignal.timeout(15_000),
   }).catch(() => null);
 
-  if (!res) return json({ error: { message: 'Brave unreachable', type: 'upstream_unavailable' } }, 502);
+  if (!res) return json({ error: { message: 'Brave unreachable', type: 'upstream_unavailable' } }, 502, request);
   if (!res.ok) {
     await res.body?.cancel().catch(() => undefined);
-    return json({ error: { message: sanitizeProviderError(res.status), type: 'provider_error' } }, res.status === 429 ? 429 : 502);
+    return json({ error: { message: sanitizeProviderError(res.status), type: 'provider_error' } }, res.status === 429 ? 429 : 502, request);
   }
-  return json(await res.json());
+  return json(await res.json(), 200, request);
 }
 
 /** POST /api/search/parallel — Parallel Search proxy, key injected here. */
 async function proxyParallel(request: Request, env: Env): Promise<Response> {
   if (!env.PARALLEL_API_KEY) {
-    return json({ error: { message: 'Engine Parallel is not configured on this deployment', type: 'unavailable' } }, 503);
+    return json({ error: { message: 'Engine Parallel is not configured on this deployment', type: 'unavailable' } }, 503, request);
   }
   const ip = `${request.headers.get('CF-Connecting-IP') ?? 'anonymous'}:search`;
   if (rateLimited(ip)) {
-    return json({ error: { message: 'Rate limit exceeded — slow down', type: 'rate_limited' } }, 429);
+    return json({ error: { message: 'Rate limit exceeded — slow down', type: 'rate_limited' } }, 429, request);
   }
 
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
-    return json({ error: { message: 'Body must be JSON', type: 'invalid_request' } }, 400);
+    return json({ error: { message: 'Body must be JSON', type: 'invalid_request' } }, 400, request);
   }
 
   // Validate + bound the payload (never forward arbitrary bodies upstream).
@@ -223,7 +264,7 @@ async function proxyParallel(request: Request, env: Env): Promise<Response> {
     ? body.search_queries.filter((q): q is string => typeof q === 'string').map((q) => q.slice(0, 200)).slice(0, 5)
     : [];
   if (queries.length === 0) {
-    return json({ error: { message: 'search_queries must be a non-empty string array', type: 'invalid_request' } }, 400);
+    return json({ error: { message: 'search_queries must be a non-empty string array', type: 'invalid_request' } }, 400, request);
   }
   const mode = typeof body.mode === 'string' && ['turbo', 'fast', 'basic', 'advanced'].includes(body.mode) ? body.mode : 'fast';
 
@@ -244,18 +285,18 @@ async function proxyParallel(request: Request, env: Env): Promise<Response> {
     signal: AbortSignal.timeout(20_000),
   }).catch(() => null);
 
-  if (!res) return json({ error: { message: 'Parallel unreachable', type: 'upstream_unavailable' } }, 502);
+  if (!res) return json({ error: { message: 'Parallel unreachable', type: 'upstream_unavailable' } }, 502, request);
   if (!res.ok) {
     await res.body?.cancel().catch(() => undefined);
-    return json({ error: { message: sanitizeProviderError(res.status), type: 'provider_error' } }, res.status === 429 ? 429 : 502);
+    return json({ error: { message: sanitizeProviderError(res.status), type: 'provider_error' } }, res.status === 429 ? 429 : 502, request);
   }
-  return json(await res.json());
+  return json(await res.json(), 200, request);
 }
 
 /** Owner-authenticated config write (NIP-98-style signed event, KV-backed). */
 async function handleAdmin(request: Request, env: Env): Promise<Response> {
   const auth = await verifyAdminAuth(request.headers.get('Authorization'), request.url, env);
-  if (!auth.ok) return json({ error: { message: auth.error, type: 'unauthorized' } }, auth.error === 'Admin is not configured on this deployment' ? 501 : 403);
+  if (!auth.ok) return json({ error: { message: auth.error, type: 'unauthorized' } }, auth.error === 'Admin is not configured on this deployment' ? 501 : 403, request);
 
   if (!env.AI_CONFIG_KV) {
     return json({
@@ -263,7 +304,7 @@ async function handleAdmin(request: Request, env: Env): Promise<Response> {
         message: 'Runtime config storage (KV) is not bound — configure engine AI via environment variables instead',
         type: 'storage_unavailable',
       },
-    }, 501);
+    }, 501, request);
   }
 
   let eventContent: string;
@@ -272,18 +313,18 @@ async function handleAdmin(request: Request, env: Env): Promise<Response> {
     const event = JSON.parse(atob(header.slice(6))) as { content?: string };
     eventContent = typeof event.content === 'string' ? event.content : '';
   } catch {
-    return json({ error: { message: 'Malformed authorization event', type: 'invalid_request' } }, 400);
+    return json({ error: { message: 'Malformed authorization event', type: 'invalid_request' } }, 400, request);
   }
 
   const action = parseAdminAction(eventContent);
   if (typeof action === 'string') {
-    return json({ error: { message: action, type: 'invalid_request' } }, 400);
+    return json({ error: { message: action, type: 'invalid_request' } }, 400, request);
   }
 
   const current = await readEngineConfig(env);
   const next = applyAdminAction(current, action);
   if (typeof next === 'string') {
-    return json({ error: { message: next, type: 'invalid_request' } }, 400);
+    return json({ error: { message: next, type: 'invalid_request' } }, 400, request);
   }
 
   await writeEngineConfig(env.AI_CONFIG_KV, next);
@@ -295,11 +336,14 @@ export default {
     const url = new URL(request.url);
 
     try {
+      if (url.pathname.startsWith('/api/') && request.method === 'OPTIONS') {
+        return handleOptions(request);
+      }
       if (url.pathname === '/api/ai/status' && request.method === 'GET') {
-        return json(buildPublicStatus(await readEngineConfig(env)));
+        return json(buildPublicStatus(await readEngineConfig(env)), 200, request);
       }
       if (url.pathname === '/api/ai/models' && request.method === 'GET') {
-        return proxyModels(env);
+        return proxyModels(env, request);
       }
       if (url.pathname === '/api/ai/chat/completions' && request.method === 'POST') {
         return proxyChat(request, env);
@@ -308,7 +352,7 @@ export default {
         return handleAdmin(request, env);
       }
       if (url.pathname === '/api/search/status' && request.method === 'GET') {
-        return searchStatus(env);
+        return searchStatus(env, request);
       }
       if (url.pathname === '/api/search/brave' && request.method === 'GET') {
         return proxyBrave(request, env);
@@ -322,7 +366,7 @@ export default {
       return new Response('Not found', { status: 404 });
     } catch {
       // Deliberately opaque: internal errors must not leak config details.
-      return json({ error: { message: 'Internal error', type: 'internal' } }, 500);
+      return json({ error: { message: 'Internal error', type: 'internal' } }, 500, request);
     }
   },
 };
