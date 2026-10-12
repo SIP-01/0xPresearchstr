@@ -7,15 +7,23 @@
  * from the blue "Staked" community keyword stakes. Links go through the
  * one-time clickUrl (records the click, then redirects to the destination);
  * reportUrl is always exposed as a "Report ad" link.
+ *
+ * The "Stake" button opens the native PRE staking dialog (approve → stake
+ * on PREKeywordMarketV1); the precommunity.org link stays as the fallback
+ * for users without a wallet.
  */
+import { useState } from 'react';
 import { ExternalLink, Flag, Gem, Megaphone } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { StakePreKeywordDialog } from '@/components/StakePreKeywordDialog';
 import type { KeywordAd } from '@/lib/keywordAds';
 import { cn } from '@/lib/utils';
 
 interface KeywordAdCardProps {
   ad: KeywordAd;
+  /** Search query that resolved this ad — prefills the staking dialog. */
+  keyword?: string;
   className?: string;
 }
 
@@ -23,7 +31,9 @@ function displayHost(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
 }
 
-export function KeywordAdCard({ ad, className }: KeywordAdCardProps) {
+export function KeywordAdCard({ ad, keyword, className }: KeywordAdCardProps) {
+  const [stakeOpen, setStakeOpen] = useState(false);
+
   return (
     <div
       className={cn(
@@ -64,19 +74,26 @@ export function KeywordAdCard({ ad, className }: KeywordAdCardProps) {
       </a>
 
       {/* Report link — always exposed, opens the public report form. The
-          "Stake this keyword" link cross-links the PREcommunity keyword
-          market so users can discover the staking/DAO side of the ad. */}
+          "Stake" button opens native PRE keyword staking; the precommunity.org
+          link stays as the fallback for users without a wallet. */}
       <div className="flex items-center gap-2 mt-2.5 text-xs text-muted-foreground/70">
         <span>keyword ad · PRE keyword market</span>
         <span className="ml-auto inline-flex items-center gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setStakeOpen(true)}
+            className="inline-flex items-center gap-1 text-muted-foreground/70 hover:text-foreground transition-colors"
+          >
+            <Gem className="w-3 h-3" />
+            Stake this keyword
+          </button>
           <a
             href="https://precommunity.org/keyword-market"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-muted-foreground/70 hover:text-foreground transition-colors"
           >
-            <Gem className="w-3 h-3" />
-            Stake this keyword →
+            precommunity.org →
           </a>
           <a
             href={ad.reportUrl}
@@ -89,6 +106,13 @@ export function KeywordAdCard({ ad, className }: KeywordAdCardProps) {
           </a>
         </span>
       </div>
+
+      {/* Native PRE staking dialog (prefilled with the resolving query) */}
+      <StakePreKeywordDialog
+        open={stakeOpen}
+        onOpenChange={setStakeOpen}
+        initialKeyword={keyword ?? ''}
+      />
     </div>
   );
 }
