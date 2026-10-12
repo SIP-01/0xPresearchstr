@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Search, Settings, PlusCircle, Menu, Compass, FileText, Info } from 'lucide-react';
+import { Search, Settings, PlusCircle, Menu, Compass, FileText, Info, Gem } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu.tsx';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { SubmitToIndex } from '@/components/SubmitToIndex';
+import { StakePreKeywordDialog } from '@/components/StakePreKeywordDialog';
 import { cn } from '@/lib/utils';
 
 /** Hamburger menu destinations — the slim header's overflow nav. */
@@ -37,6 +38,7 @@ export function Layout({ children, minimal = false }: LayoutProps) {
   const location = useLocation();
   const isHome = location.pathname === '/';
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [stakePreOpen, setStakePreOpen] = useState(false);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -149,9 +151,19 @@ export function Layout({ children, minimal = false }: LayoutProps) {
           </div>
         </div>
         {/* PREcommunity cross-links — the staking/DAO side behind the
-            keyword ads (keyword market, PreDAO escrow, escrow contract). */}
+            keyword ads. "Stake PRE" opens the native on-chain staking
+            dialog; the keyword-market link stays as the wallet-less
+            fallback. */}
         <div className="container mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground/60">
           <span className="text-muted-foreground/50">Powered by PREcommunity</span>
+          <button
+            type="button"
+            onClick={() => setStakePreOpen(true)}
+            className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+          >
+            <Gem className="w-3 h-3" />
+            Stake PRE
+          </button>
           {PRECOMMUNITY_LINKS.map((link) => (
             <a
               key={link.href}
@@ -168,6 +180,9 @@ export function Layout({ children, minimal = false }: LayoutProps) {
 
       {/* Community index submission dialog */}
       <SubmitToIndex open={submitOpen} onOpenChange={setSubmitOpen} />
+
+      {/* Native PRE keyword staking (no prefill from the footer) */}
+      <StakePreKeywordDialog open={stakePreOpen} onOpenChange={setStakePreOpen} />
     </div>
   );
 }
