@@ -13,7 +13,7 @@
  * check, user-rejection handling, wrong-network prompt, BaseScan links.
  * Nothing sensitive is ever logged — all inputs are public on-chain data.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { erc20Abi, formatUnits, parseUnits, zeroAddress } from 'viem';
 import {
   useAccount,
@@ -84,10 +84,13 @@ export function StakePreKeywordDialog({ open, onOpenChange, initialKeyword = '' 
   const [step, setStep] = useState<TxStep>('idle');
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
 
-  // Sync the prefill whenever the dialog opens with a new keyword.
-  useEffect(() => {
+  // Sync the prefill whenever the dialog opens with a new keyword
+  // (render-phase state adjustment — no effect, no cascading render).
+  const [prevOpen, setPrevOpen] = useState(false);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) setKeyword(initialKeyword);
-  }, [open, initialKeyword]);
+  }
 
   // Derived + validated inputs.
   const normalized = (() => {
