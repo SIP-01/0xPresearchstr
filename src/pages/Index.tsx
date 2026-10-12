@@ -318,9 +318,10 @@ const Index = () => {
 
           {/* Contract-backed keyword ad (PRE keyword market) — paid placement,
               rendered above the community Nostr stakes when both match. The
-              slot disappears silently when no ad resolves. */}
+              slot disappears silently when no ad resolves. The keyword prop
+              prefills the native PRE staking dialog with the active query. */}
           {source !== 'i2p' && keywordAd && (
-            <KeywordAdCard ad={keywordAd} className="mb-4" />
+            <KeywordAdCard ad={keywordAd} keyword={activeQuery} className="mb-4" />
           )}
 
           {/* Community keyword stakes — Presearch-style top placement */}
