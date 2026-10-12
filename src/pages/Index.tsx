@@ -8,6 +8,7 @@ import { SearchBar } from '@/components/SearchBar';
 import { SourceTabs, type SourceTabValue } from '@/components/SourceTabs';
 import { UnifiedResultCard } from '@/components/UnifiedResultCard';
 import { StakeResultCard } from '@/components/StakeResultCard';
+import { KeywordAdCard } from '@/components/KeywordAdCard';
 import { VoteTalliesProvider } from '@/components/VoteButtons';
 import { AIAnswerCard } from '@/components/AIAnswerCard';
 import { StakeKeywordDialog } from '@/components/StakeKeywordDialog';
@@ -21,6 +22,7 @@ import { QueryInsights } from '@/components/QueryInsights';
 import { Card, CardContent } from '@/components/ui/card';
 import { useProviderSearch } from '@/hooks/useProviderSearch';
 import { useInstantAnswer } from '@/hooks/useInstantAnswer';
+import { useKeywordAd } from '@/hooks/useKeywordAd';
 import { useAIAnswer } from '@/hooks/useAIAnswer';
 import { useSearchHotkeys } from '@/hooks/useSearchHotkeys';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -91,6 +93,15 @@ const Index = () => {
     source: providerSource as SearchSource | 'all' | 'index',
     enabled: hasSearched && source !== 'i2p',
   });
+
+  // Contract-backed keyword ad (PREcommunity PRE keyword market) — resolves
+  // via the same-origin /api/ads/resolve worker route alongside the search.
+  // Coexistence/precedence with Nostr keyword stakes: the two systems are
+  // independent. The paid contract ad renders ABOVE community stakes when
+  // both match; each renders alone when the other is absent. The ad slot
+  // silently disappears when there's no ad or the route is unconfigured
+  // (503 — e.g. GitHub Pages deploys, where no worker runs).
+  const { ad: keywordAd } = useKeywordAd(activeQuery, hasSearched && source !== 'i2p');
 
   // Filter results for the current source tab.
   const filteredResults = useMemo(() => {
@@ -303,6 +314,13 @@ const Index = () => {
               error={ai.error}
               className="mb-4"
             />
+          )}
+
+          {/* Contract-backed keyword ad (PRE keyword market) — paid placement,
+              rendered above the community Nostr stakes when both match. The
+              slot disappears silently when no ad resolves. */}
+          {source !== 'i2p' && keywordAd && (
+            <KeywordAdCard ad={keywordAd} className="mb-4" />
           )}
 
           {/* Community keyword stakes — Presearch-style top placement */}
