@@ -8,7 +8,7 @@
  * one-time clickUrl (records the click, then redirects to the destination);
  * reportUrl is always exposed as a "Report ad" link.
  */
-import { ExternalLink, Flag, Megaphone } from 'lucide-react';
+import { ExternalLink, Flag, Gem, Megaphone } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import type { KeywordAd } from '@/lib/keywordAds';
@@ -63,18 +63,31 @@ export function KeywordAdCard({ ad, className }: KeywordAdCardProps) {
         )}
       </a>
 
-      {/* Report link — always exposed, opens the public report form */}
+      {/* Report link — always exposed, opens the public report form. The
+          "Stake this keyword" link cross-links the PREcommunity keyword
+          market so users can discover the staking/DAO side of the ad. */}
       <div className="flex items-center gap-2 mt-2.5 text-xs text-muted-foreground/70">
         <span>keyword ad · PRE keyword market</span>
-        <a
-          href={ad.reportUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ml-auto inline-flex items-center gap-1 text-muted-foreground/70 hover:text-foreground transition-colors"
-        >
-          <Flag className="w-3 h-3" />
-          Report ad
-        </a>
+        <span className="ml-auto inline-flex items-center gap-3 shrink-0">
+          <a
+            href="https://precommunity.org/keyword-market"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-muted-foreground/70 hover:text-foreground transition-colors"
+          >
+            <Gem className="w-3 h-3" />
+            Stake this keyword →
+          </a>
+          <a
+            href={ad.reportUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-muted-foreground/70 hover:text-foreground transition-colors"
+          >
+            <Flag className="w-3 h-3" />
+            Report ad
+          </a>
+        </span>
       </div>
     </div>
   );

@@ -20,6 +20,13 @@ const MENU_ITEMS = [
   { to: '/about', label: 'About', icon: <Info className="w-4 h-4" /> },
 ];
 
+/** PREcommunity cross-links — keyword market, PreDAO escrow, escrow contract. */
+const PRECOMMUNITY_LINKS = [
+  { href: 'https://precommunity.org/keyword-market', label: 'Keyword Market' },
+  { href: 'https://precommunity.org/funding', label: 'PreDAO (Escrow)' },
+  { href: 'https://basescan.org/address/0xcCa53814861B9589e9Ef8D5bf2be8EbC77052C3d', label: 'Escrow contract' },
+];
+
 interface LayoutProps {
   children: React.ReactNode;
   /** When true, the layout uses a minimal header (for the home search page). */
@@ -140,6 +147,22 @@ export function Layout({ children, minimal = false }: LayoutProps) {
               Vibed with Shakespeare
             </a>
           </div>
+        </div>
+        {/* PREcommunity cross-links — the staking/DAO side behind the
+            keyword ads (keyword market, PreDAO escrow, escrow contract). */}
+        <div className="container mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground/60">
+          <span className="text-muted-foreground/50">Powered by PREcommunity</span>
+          {PRECOMMUNITY_LINKS.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors"
+            >
+              {link.label}
+            </a>
+          ))}
         </div>
       </footer>
 
