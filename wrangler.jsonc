@@ -9,6 +9,13 @@
  *   2. Set the non-secret vars below (OWNER_PUBKEY enables the Admin → AI tab)
  *   3. wrangler deploy
  *
+ * Optional — keyword ads (PREcommunity PRE keyword market):
+ *   wrangler secret put PRECOMMUNITY_ADS_API_KEY   ← integration key from
+ *   https://precommunity.org/keyword-market/api-keys (SUPER_ADMIN-managed).
+ *   Without it, /api/ads/resolve returns 503 and the frontend shows no ad.
+ *   NOTE: ads require the Worker deployment — GitHub Pages serves only the
+ *   static app and cannot proxy.
+ *
  * Optional — admin-UI-managed config (write the key from the Admin tab
  * instead of env vars): create a KV namespace and uncomment the binding:
  *   wrangler kv namespace create AI_CONFIG_KV

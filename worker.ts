@@ -12,22 +12,27 @@
  *   GET  /api/search/status        → which engine search providers are configured
  *   GET  /api/search/brave         → Brave Search proxy, key injected here
  *   POST /api/search/parallel      → Parallel Search proxy, key injected here
+ *   GET  /api/ads/resolve          → PREcommunity keyword-market ad resolver proxy
  *
  * Operator configuration (nothing secret in the repo):
  *   wrangler secret put AI_API_KEY            ← the actual key (env-only mode)
  *   wrangler secret put BRAVE_API_KEY         ← engine-provided Brave Search
  *   wrangler secret put PARALLEL_API_KEY      ← engine-provided Parallel Search
+ *   wrangler secret put PRECOMMUNITY_ADS_API_KEY  ← keyword ads integration key
  *   AI_PROVIDER_ENDPOINT / AI_MODEL / AI_PROVIDER_NAME / AI_ENGINE_ENABLED (vars)
  *   OWNER_PUBKEY (var, hex)                   ← enables the Admin → AI tab
  *   AI_CONFIG_KV (KV binding, optional)       ← enables admin-UI-managed config
  *
  * The /api/search/* routes are the 0xSigner delegation surface: provider
  * credentials live server-side (or later inside 0xSigner), the browser only
- * ever talks same-origin and never holds an engine key.
+ * ever talks same-origin and never holds an engine key. /api/ads/resolve
+ * follows the same rule for the PREcommunity keyword-market integration
+ * key (see https://precommunity.org/keyword-market/api-keys).
  *
  * KV config wins over env vars. Neither present → status reports
  * "not configured" and chat returns 503 — fresh clones stay fully
  * functional with AI simply unavailable until a user adds their own key.
+ * The same holds for ads: no key → 503, and the frontend renders no ad.
  *
  * No logging of request bodies, keys, or provider error payloads anywhere.
  */
@@ -50,6 +55,8 @@ interface Env extends EngineAIEnv {
   BRAVE_API_KEY?: string;
   /** Engine-provided Parallel Search key (wrangler secret) — server-side only. */
   PARALLEL_API_KEY?: string;
+  /** PREcommunity keyword-market integration key (wrangler secret) — server-side only. */
+  PRECOMMUNITY_ADS_API_KEY?: string;
 }
 
 /**
@@ -293,6 +300,102 @@ async function proxyParallel(request: Request, env: Env): Promise<Response> {
   return json(await res.json(), 200, request);
 }
 
+/* ------------------------------------------------------------------ */
+/* Keyword ads (PREcommunity PRE keyword market) — key server-side only */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Short per-query cache for resolver answers (in-memory per isolate).
+ * Protects the PREcommunity quota against hot-query loops. Kept short
+ * because a resolver answer carries a one-time clickUrl billing identity —
+ * responses shared across viewers inside the TTL window share that
+ * identity, so the TTL must stay small (the upstream documents resolver
+ * cache hits as counted Views, i.e. caching is an expected pattern).
+ */
+const AD_CACHE_TTL_MS = 30_000;
+const adCache = new Map<string, { at: number; payload: { ad: ResolvedAd | null } }>();
+
+/** Documented resolver ad shape — only these fields are ever forwarded. */
+interface ResolvedAd {
+  headline: string;
+  description: string;
+  clickUrl: string;
+  url: string;
+  reportUrl: string;
+}
+
+/** Extract the documented ad fields; returns null for anything malformed. */
+function sanitizeAd(raw: unknown): ResolvedAd | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const a = raw as Record<string, unknown>;
+  const headline = typeof a.headline === 'string' ? a.headline.trim().slice(0, 200) : '';
+  const description = typeof a.description === 'string' ? a.description.trim().slice(0, 500) : '';
+  const clickUrl = typeof a.clickUrl === 'string' ? a.clickUrl : '';
+  const url = typeof a.url === 'string' ? a.url : '';
+  const reportUrl = typeof a.reportUrl === 'string' ? a.reportUrl : '';
+  if (!headline || !clickUrl || !url || !reportUrl) return null;
+  // All three addresses are documented as absolute URLs; require https here
+  // so a poisoned/compromised upstream can never turn them into js:/data: links.
+  if (!clickUrl.startsWith('https://') || !url.startsWith('https://') || !reportUrl.startsWith('https://')) return null;
+  return { headline, description, clickUrl, url, reportUrl };
+}
+
+/**
+ * GET /api/ads/resolve?q=… — proxy for the PREcommunity keyword-market
+ * resolver (`GET https://precommunity.org/api/v1/keyword-market/resolve?q=…`
+ * with header `X-API-Key`). The integration key lives in the
+ * PRECOMMUNITY_ADS_API_KEY worker secret and never reaches a browser.
+ *
+ * Responses mirror the upstream contract: `{ ad }` with `ad: null` when
+ * there is no eligible ad (and as the graceful fallback for any upstream
+ * failure), or `{ ad: { headline, description, clickUrl, url, reportUrl } }`.
+ */
+async function proxyAdsResolve(request: Request, env: Env): Promise<Response> {
+  if (!env.PRECOMMUNITY_ADS_API_KEY) {
+    return json({ error: { message: 'Keyword ads are not configured on this deployment', type: 'unavailable' } }, 503, request);
+  }
+  const ip = `${request.headers.get('CF-Connecting-IP') ?? 'anonymous'}:ads`;
+  if (rateLimited(ip)) {
+    return json({ error: { message: 'Rate limit exceeded — slow down', type: 'rate_limited' } }, 429, request);
+  }
+
+  const url = new URL(request.url);
+  const q = (url.searchParams.get('q') ?? '').trim().slice(0, 200);
+  if (!q) return json({ error: { message: 'Missing q', type: 'invalid_request' } }, 400, request);
+
+  const cacheKey = q.toLowerCase();
+  const cached = adCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < AD_CACHE_TTL_MS) {
+    return json(cached.payload, 200, request);
+  }
+
+  const upstream = new URL('https://precommunity.org/api/v1/keyword-market/resolve');
+  upstream.searchParams.set('q', q);
+  const res = await fetch(upstream, {
+    headers: { Accept: 'application/json', 'X-API-Key': env.PRECOMMUNITY_ADS_API_KEY },
+    signal: AbortSignal.timeout(8_000),
+  }).catch(() => null);
+
+  if (!res) return json({ ad: null }, 200, request); // unreachable → graceful no-ad
+  if (!res.ok) {
+    // Drain without reading/logging — upstream error bodies are not echoed.
+    await res.body?.cancel().catch(() => undefined);
+    return json({ ad: null }, 200, request); // upstream error → graceful no-ad
+  }
+
+  let raw: unknown;
+  try {
+    raw = await res.json();
+  } catch {
+    return json({ ad: null }, 200, request);
+  }
+
+  const payload = { ad: sanitizeAd((raw as { ad?: unknown }).ad) };
+  if (adCache.size > 5_000) adCache.clear(); // bound memory under flood
+  adCache.set(cacheKey, { at: Date.now(), payload });
+  return json(payload, 200, request);
+}
+
 /** Owner-authenticated config write (NIP-98-style signed event, KV-backed). */
 async function handleAdmin(request: Request, env: Env): Promise<Response> {
   const auth = await verifyAdminAuth(request.headers.get('Authorization'), request.url, env);
@@ -359,6 +462,9 @@ export default {
       }
       if (url.pathname === '/api/search/parallel' && request.method === 'POST') {
         return proxyParallel(request, env);
+      }
+      if (url.pathname === '/api/ads/resolve' && request.method === 'GET') {
+        return proxyAdsResolve(request, env);
       }
 
       // Everything else → static assets.
