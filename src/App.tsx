@@ -2,6 +2,7 @@
 // To add new routes, edit the AppRouter.tsx file.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { WagmiProvider } from 'wagmi';
 import { createHead, UnheadProvider } from '@unhead/react/client';
 import { InferSeoMetaPlugin } from 'unhead/plugins';
 import { Suspense } from 'react';
@@ -13,6 +14,7 @@ import { NostrLoginProvider } from '@nostrify/react/login';
 import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
+import { wagmiConfig } from '@/lib/web3/wagmi';
 import { DEFAULT_TAB_CONFIG } from '@/components/SourceTabs';
 import { getBrowserLanguage } from '@/lib/languageFilter';
 import AppRouter from './AppRouter';
@@ -69,19 +71,23 @@ export function App() {
   return (
     <UnheadProvider head={head}>
       <AppProvider storageKey="nostr:app-config" defaultConfig={defaultConfig}>
-        <QueryClientProvider client={queryClient}>
-          <NostrLoginProvider storageKey='nostr:login'>
-            <NostrProvider>
-              <NostrSync />
-              <TooltipProvider>
-                <Toaster />
-                <Suspense>
-                  <AppRouter />
-                </Suspense>
-              </TooltipProvider>
-            </NostrProvider>
-          </NostrLoginProvider>
-        </QueryClientProvider>
+        {/* wagmi (Base, injected wallet) wraps react-query, which wagmi uses
+            internally for its read caching. */}
+        <WagmiProvider config={wagmiConfig}>
+          <QueryClientProvider client={queryClient}>
+            <NostrLoginProvider storageKey='nostr:login'>
+              <NostrProvider>
+                <NostrSync />
+                <TooltipProvider>
+                  <Toaster />
+                  <Suspense>
+                    <AppRouter />
+                  </Suspense>
+                </TooltipProvider>
+              </NostrProvider>
+            </NostrLoginProvider>
+          </QueryClientProvider>
+        </WagmiProvider>
       </AppProvider>
     </UnheadProvider>
   );
