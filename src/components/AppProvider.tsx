@@ -1,7 +1,9 @@
-import { ReactNode, useEffect } from 'react';
+import { type ReactNode, useCallback, useEffect } from 'react';
 import { z } from 'zod';
+import { useNostrLogin } from '@nostrify/react/login';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { AppContext, type AppConfig, type AppContextType, type Theme, type RelayMetadata, type BlossomServerMetadata } from '@/contexts/AppContext';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AppContext, type AccountConfig, type AppConfig, type AppContextType, type Theme, type RelayMetadata, type BlossomServerMetadata } from '@/contexts/AppContext';
 import { getBraveApiKey } from '@/lib/providers/brave';
 import { getParallelApiKey } from '@/lib/providers/parallel';
 import { getEngineSearchStatus } from '@/lib/engineSearch';
@@ -57,32 +59,51 @@ const AppConfigSchema = z.object({
   ),
 }) satisfies z.ZodType<AppConfig>;
 
+const StoredConfigSchema = AppConfigSchema.partial().extend({
+  accountConfigs: z.record(z.string().regex(/^[0-9a-f]{64}$/), AppConfigSchema.pick({
+    relayMetadata: true,
+    blossomServerMetadata: true,
+    useAppBlossomServers: true,
+  }).partial()).optional(),
+});
+
+type StoredConfig = Partial<AppConfig> & {
+  accountConfigs?: Record<string, Partial<AccountConfig>>;
+};
+
+function deserializeConfig(value: string): StoredConfig {
+  const parsed: unknown = JSON.parse(value);
+  if (parsed && typeof parsed === 'object' && 'theme' in parsed
+    && (parsed.theme === 'presearch' || parsed.theme === 'system')) {
+    parsed.theme = 'dark';
+  }
+  return StoredConfigSchema.parse(parsed);
+}
+
+function configForAccount(stored: StoredConfig, pubkey: string | undefined): Partial<AppConfig> {
+  const { accountConfigs, ...global } = stored;
+  if (!pubkey) return global;
+  // Legacy destinations have no reliable account owner; keep them for logged-out use.
+  const { relayMetadata: _relays, blossomServerMetadata: _servers, useAppBlossomServers: _appServers, ...shared } = global;
+  return { ...shared, ...accountConfigs?.[pubkey] };
+}
+
 export function AppProvider(props: AppProviderProps) {
   const {
     children,
     storageKey,
     defaultConfig,
   } = props;
+  const { logins } = useNostrLogin();
+  const accountPubkey = logins[0]?.pubkey;
 
   // App configuration state with localStorage persistence
-  const [rawConfig, setConfig] = useLocalStorage<Partial<AppConfig>>(
+  const [rawConfig, setConfig, hasStorageError] = useLocalStorage<StoredConfig>(
     storageKey,
     {},
     {
       serialize: JSON.stringify,
-      deserialize: (value: string) => {
-        const parsed = JSON.parse(value);
-        // Migrate retired themes: 'presearch' was the brand dark (now just
-        // 'dark'), 'system' followed the device (removed). Map both to 'dark'
-        // BEFORE zod so the enum doesn't reject the whole stored config.
-        if (parsed && typeof parsed === 'object' && 'theme' in parsed) {
-          const t = (parsed as { theme?: unknown }).theme;
-          if (t === 'presearch' || t === 'system') {
-            (parsed as { theme: unknown }).theme = 'dark';
-          }
-        }
-        return AppConfigSchema.partial().parse(parsed);
-      }
+      deserialize: deserializeConfig,
     }
   );
 
@@ -90,11 +111,38 @@ export function AppProvider(props: AppProviderProps) {
   // The updater returns the fields to change — they are MERGED into the
   // current stored config (never replace it), so callers can't wipe
   // unrelated settings by omitting them from the returned object.
-  const updateConfig = (updater: (currentConfig: Partial<AppConfig>) => Partial<AppConfig>) => {
-    setConfig((currentConfig) => ({ ...currentConfig, ...updater(currentConfig) }));
-  };
+  const updateConfig = useCallback((updater: (currentConfig: Partial<AppConfig>) => Partial<AppConfig>) => {
+    setConfig((current) => {
+      const patch = updater(configForAccount(current, accountPubkey));
+      if (!accountPubkey) return { ...current, ...patch };
+      const { relayMetadata, blossomServerMetadata, useAppBlossomServers, ...shared } = patch;
+      const accountPatch = {
+        ...(relayMetadata ? { relayMetadata } : {}),
+        ...(blossomServerMetadata ? { blossomServerMetadata } : {}),
+        ...(useAppBlossomServers !== undefined ? { useAppBlossomServers } : {}),
+      };
+      return {
+        ...current,
+        ...shared,
+        accountConfigs: {
+          ...current.accountConfigs,
+          [accountPubkey]: { ...current.accountConfigs?.[accountPubkey], ...accountPatch },
+        },
+      };
+    });
+  }, [accountPubkey, setConfig]);
 
-  const config = { ...defaultConfig, ...rawConfig };
+  const updateAccountConfig = useCallback((pubkey: string, updater: (current: Partial<AccountConfig>) => Partial<AccountConfig>) => {
+    setConfig((current) => {
+      const account = current.accountConfigs?.[pubkey] ?? {};
+      return {
+        ...current,
+        accountConfigs: { ...current.accountConfigs, [pubkey]: { ...account, ...updater(account) } },
+      };
+    });
+  }, [setConfig]);
+
+  const config = { ...defaultConfig, ...configForAccount(rawConfig, accountPubkey) };
 
   // Migration: Brave and Parallel are off by default, but a stored API key is
   // an explicit past opt-in. Users who never touched the engine list get the
@@ -113,26 +161,28 @@ export function AppProvider(props: AppProviderProps) {
   // engine list, un-park it so everyone gets it without BYOK setup.
   const userCustomizedEngines = rawConfig.disabledProviders !== undefined;
   useEffect(() => {
-    if (userCustomizedEngines) return;
+    if (userCustomizedEngines || config.privacyMode) return;
     let cancelled = false;
     void getEngineSearchStatus().then((status) => {
       if (cancelled) return;
       const unpark: string[] = [];
-      if (status.brave) unpark.push('brave');
-      if (status.parallel) unpark.push('parallel');
+      if (status.brave || getBraveApiKey()) unpark.push('brave');
+      if (status.parallel || getParallelApiKey()) unpark.push('parallel');
       if (unpark.length === 0) return;
-      updateConfig((cur) => ({
-        disabledProviders: (cur.disabledProviders ?? []).filter((id) => !unpark.includes(id)),
+      updateConfig((cur) => cur.disabledProviders !== undefined ? {} : ({
+        disabledProviders: defaultConfig.disabledProviders.filter((id) => !unpark.includes(id)),
       }));
     });
     return () => {
       cancelled = true;
     };
-  }, [userCustomizedEngines]);
+  }, [userCustomizedEngines, config.privacyMode, defaultConfig.disabledProviders, updateConfig]);
 
   const appContextValue: AppContextType = {
     config,
     updateConfig,
+    accountPubkey,
+    updateAccountConfig,
   };
 
   // Apply theme effects to document
@@ -141,6 +191,14 @@ export function AppProvider(props: AppProviderProps) {
   return (
     <AppContext.Provider value={appContextValue}>
       {children}
+      {hasStorageError && (
+        <Alert variant="destructive" className="fixed inset-x-4 bottom-4 z-50 w-auto shadow-sm sm:left-auto sm:w-96">
+          <AlertTitle className="text-lg">Settings could not be saved</AlertTitle>
+          <AlertDescription className="text-lg">
+            Changes apply for this session only. Reloading may restore your previous settings.
+          </AlertDescription>
+        </Alert>
+      )}
     </AppContext.Provider>
   );
 }

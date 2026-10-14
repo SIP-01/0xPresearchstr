@@ -123,7 +123,7 @@ async function fetchPage(url: string, network: NetworkType): Promise<string | nu
       const http = await import('node:http');
       html = await new Promise<string>((resolve, reject) => {
         const req = http.request(url, {
-          agent: torAgent as unknown as http.Agent,
+          agent: torAgent,
           timeout: 30000,
           headers: {
             'User-Agent': '0xPresearchstr/0.1',

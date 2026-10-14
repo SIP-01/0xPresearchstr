@@ -66,8 +66,9 @@ export const cachedIndexProvider: SearchProvider = {
 
     for (const event of candidates) {
       const cached = parseCacheEvent(event);
-      if (cached && cached.results.length > 0) {
-        return { results: cached.results };
+      const organicResults = cached?.results.filter((result) => result.provider !== 'keyword-stake') ?? [];
+      if (organicResults.length > 0) {
+        return { results: organicResults };
       }
     }
 

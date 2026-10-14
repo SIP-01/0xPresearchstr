@@ -2,13 +2,13 @@
   "name": "Presearchstr",
   "short_name": "Presearchstr",
   "description": "Community-driven, Nostr-native search — the federated search engine where every search grows the shared index.",
-  "start_url": "/",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#070b1a",
   "theme_color": "#2d8eff",
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml"
     }

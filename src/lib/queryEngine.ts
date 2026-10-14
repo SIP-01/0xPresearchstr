@@ -21,7 +21,6 @@
  */
 import {
   parseQuery,
-  type FilterClause,
   type FilterField,
   type ParsedQuery,
   type QueryNode,
@@ -379,7 +378,7 @@ export function evaluateQuery(doc: FilterDoc, parsed: ParsedQuery): EvalResult {
   }
 
   let match: boolean;
-  let phraseHit = false;
+  let phraseHit: boolean;
 
   if (!parsed.hasBoolean) {
     // Legacy gate: the plain-query semantics that already work.

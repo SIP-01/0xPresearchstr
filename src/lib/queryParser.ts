@@ -225,7 +225,7 @@ function startsPrimary(t: Token | undefined): boolean {
 
 function parseOr(s: ParseState): QueryNode | undefined {
   const children: QueryNode[] = [];
-  let child = parseAnd(s);
+  const child = parseAnd(s);
   if (child) children.push(child);
 
   while (peek(s)?.kind === 'or') {
@@ -247,7 +247,7 @@ function parseOr(s: ParseState): QueryNode | undefined {
 function parseAnd(s: ParseState): QueryNode | undefined {
   const children: QueryNode[] = [];
   let implicit = true;
-  let child = parseUnary(s);
+  const child = parseUnary(s);
   if (child) children.push(child);
 
   for (;;) {

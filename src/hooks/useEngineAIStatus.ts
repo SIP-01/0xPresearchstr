@@ -28,10 +28,11 @@ async function fetchEngineStatus(signal: AbortSignal): Promise<EngineAIStatus> {
   };
 }
 
-export function useEngineAIStatus(): { status: EngineAIStatus | null; isLoading: boolean } {
+export function useEngineAIStatus(enabled = true): { status: EngineAIStatus | null; isLoading: boolean } {
   const { data, isLoading } = useQuery({
     queryKey: ['engine-ai-status'],
     queryFn: ({ signal }) => fetchEngineStatus(signal),
+    enabled,
     staleTime: 5 * 60_000,
     retry: 0,
   });

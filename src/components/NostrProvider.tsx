@@ -1,39 +1,23 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { type NostrSigner, NostrEvent, NostrFilter, NPool, NRelay1 } from '@nostrify/nostrify';
 import { NostrContext } from '@nostrify/react';
 import { NUser, useNostrLogin } from '@nostrify/react/login';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '@/hooks/useAppContext';
+import type { RelayMetadata } from '@/contexts/AppContext';
 import { toSecureRelayUrl } from '@/lib/appRelays';
 
 interface NostrProviderProps {
   children: React.ReactNode;
 }
 
-const NostrProvider: React.FC<NostrProviderProps> = (props) => {
-  const { children } = props;
-  const { config } = useAppContext();
-  const { logins } = useNostrLogin();
-
-  const queryClient = useQueryClient();
-
-  // Use refs so the pool callbacks always see the latest data without
-  // recreating the pool. The refs are written from effects (never during
-  // render) to satisfy React's purity rules.
-  const relayMetadataRef = useRef(config.relayMetadata);
-
-  // Stable ref to the current user's signer for NIP-42 AUTH.
-  // The `open()` callback reads from this ref when a relay sends an AUTH
-  // challenge, so it always uses the latest signer without recreating the pool.
-  const signerRef = useRef<NostrSigner | undefined>(undefined);
-
-  // Lazily create the pool once, via useState's initializer. This keeps
-  // the render body pure (no ref writes) while guaranteeing a single
-  // NPool instance per provider. The initializer runs exactly once at
-  // mount, so reading refs inside its closures is safe.
-  // eslint-disable-next-line react-hooks/refs
-  const [pool] = useState<NPool>(() => new NPool({
+function createPoolSession(pubkey: string | undefined, initialMetadata: RelayMetadata) {
+  let relayMetadata = initialMetadata;
+  let signer: NostrSigner | undefined;
+  let closed = false;
+  const pool = new NPool({
     open(url: string) {
+      if (closed) throw new Error('Nostr account session closed');
       // Chokepoint: EVERY pool connection flows through here (reads, writes,
       // NIP-46 bunker/nostrconnect dials). A ws:// URL on an HTTPS page
       // throws a synchronous SecurityError at WebSocket construction and
@@ -42,11 +26,10 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
         // NIP-42: Respond to relay AUTH challenges by signing a kind
         // 22242 ephemeral event with the current user's signer.
         auth: async (challenge: string) => {
-          const signer = signerRef.current;
-          if (!signer) {
+          if (closed || !signer) {
             throw new Error('AUTH failed: no signer available (user not logged in)');
           }
-          return signer.signEvent({
+          const event = await signer.signEvent({
             kind: 22242,
             content: '',
             tags: [
@@ -55,15 +38,18 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
             ],
             created_at: Math.floor(Date.now() / 1000),
           });
+          if (closed) throw new Error('Nostr account session closed');
+          return event;
         },
       });
     },
     reqRouter(filters: NostrFilter[]) {
       const routes = new Map<string, NostrFilter[]>();
+      if (closed) return routes;
 
       // Route to all read relays (ws:// upgraded to wss:// on HTTPS pages —
       // a ws:// URL would throw at WebSocket construction and kill the query)
-      const readRelays = relayMetadataRef.current.relays
+      const readRelays = relayMetadata.relays
         .filter(r => r.read)
         .map(r => toSecureRelayUrl(r.url));
 
@@ -74,8 +60,9 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
       return routes;
     },
     eventRouter(_event: NostrEvent) {
+      if (closed) throw new Error('Nostr account session closed');
       // Get write relays from metadata (same ws://→wss:// upgrade as reads)
-      const writeRelays = relayMetadataRef.current.relays
+      const writeRelays = relayMetadata.relays
         .filter(r => r.write)
         .map(r => toSecureRelayUrl(r.url));
 
@@ -84,7 +71,35 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
       return [...allRelays];
     },
     eoseTimeout: 200,
-  }));
+  });
+
+  return {
+    pubkey,
+    pool,
+    setSigner(value: NostrSigner | undefined) { signer = value; },
+    setRelayMetadata(value: RelayMetadata) { relayMetadata = value; },
+    close() {
+      closed = true;
+      signer = undefined;
+      return pool.close();
+    },
+  };
+}
+
+const NostrProvider: React.FC<NostrProviderProps> = ({ children }) => {
+  const { config, accountPubkey } = useAppContext();
+  const { logins } = useNostrLogin();
+  const queryClient = useQueryClient();
+  const [session, setSession] = useState(() => createPoolSession(accountPubkey, config.relayMetadata));
+  // Replace account connections without remounting forms or other UI state.
+  if (session.pubkey !== accountPubkey) {
+    setSession(createPoolSession(accountPubkey, config.relayMetadata));
+  }
+  const { pool } = session;
+
+  useEffect(() => () => {
+    void session.close().catch(() => undefined);
+  }, [session]);
 
   // Derive the current signer from the active login. This mirrors the
   // logic in useCurrentUser but avoids a circular dependency (useCurrentUser
@@ -108,17 +123,16 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     }
   }, [currentLogin, pool]);
 
-  // Keep the ref in sync so the AUTH callback always sees the latest signer.
-  // Writing refs from an effect (not during render) satisfies purity rules.
+  // Each pool can authenticate only with the signer from its own account session.
   useEffect(() => {
-    signerRef.current = currentSigner;
-  }, [currentSigner]);
+    session.setSigner(currentSigner);
+  }, [currentSigner, session]);
 
   // Invalidate Nostr queries when relay metadata changes.
   useEffect(() => {
-    relayMetadataRef.current = config.relayMetadata;
+    session.setRelayMetadata(config.relayMetadata);
     queryClient.invalidateQueries({ queryKey: ['nostr'] });
-  }, [config.relayMetadata, queryClient]);
+  }, [config.relayMetadata, queryClient, session]);
 
   const contextValue = useMemo(() => ({ nostr: pool }), [pool]);
 

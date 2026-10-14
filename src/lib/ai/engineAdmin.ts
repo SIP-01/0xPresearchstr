@@ -44,7 +44,7 @@ export class EngineAdminError extends Error {
 
 /** Send a signed admin action to the engine-AI proxy. Returns the new public status. */
 export async function sendEngineAIAction(signer: EventSigner, action: AdminAction): Promise<EngineAIStatus> {
-  const url = `${location.origin}${ENGINE_AI_BASE}/admin`;
+  const url = new URL(`${ENGINE_AI_BASE}/admin`, location.origin).href;
 
   const event = await signer.signEvent({
     kind: 27235,

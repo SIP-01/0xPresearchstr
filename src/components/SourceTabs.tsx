@@ -1,9 +1,7 @@
 import { cn } from '@/lib/utils';
-import { Layers, Zap, Globe, Shield, Network, BookOpen, Newspaper, Code, Database } from 'lucide-react';
-import type { SearchSource } from '@/lib/providers/types';
 import { useAppContext } from '@/hooks/useAppContext';
-
-export type SourceTabValue = SearchSource | 'all' | 'index' | 'i2p';
+import { ALL_SOURCE_TABS, type SourceTabValue, type SourceTabMeta } from '@/lib/sourceTabs';
+export type { SourceTabValue } from '@/lib/sourceTabs';
 
 interface SourceTabsProps {
   value: SourceTabValue;
@@ -13,95 +11,7 @@ interface SourceTabsProps {
   counts?: Partial<Record<SourceTabValue, number>>;
 }
 
-export interface SourceTabMeta {
-  id: SourceTabValue;
-  label: string;
-  icon: React.ReactNode;
-  color: string;
-  activeColor: string;
-}
-
-/** All known tabs — display metadata. Order/visibility come from tabConfig. */
-export const ALL_SOURCE_TABS: SourceTabMeta[] = [
-  {
-    id: 'web',
-    label: 'Web',
-    icon: <Globe className="w-3.5 h-3.5" />,
-    color: 'text-muted-foreground/70 hover:text-foreground',
-    activeColor: 'text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/30',
-  },
-  {
-    id: 'index',
-    label: 'Index',
-    icon: <Database className="w-3.5 h-3.5" />,
-    color: 'text-muted-foreground/70 hover:text-foreground',
-    activeColor: 'text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/30',
-  },
-  {
-    id: 'all',
-    label: 'All',
-    icon: <Layers className="w-3.5 h-3.5" />,
-    color: 'text-muted-foreground/70 hover:text-foreground',
-    activeColor: 'text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/30',
-  },
-  {
-    id: 'nostr',
-    label: 'Nostr',
-    icon: <Zap className="w-3.5 h-3.5" />,
-    color: 'text-muted-foreground/70 hover:text-foreground',
-    activeColor: 'text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/30',
-  },
-  {
-    id: 'wiki',
-    label: 'Wiki',
-    icon: <BookOpen className="w-3.5 h-3.5" />,
-    color: 'text-muted-foreground/70 hover:text-foreground',
-    activeColor: 'text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/30',
-  },
-  {
-    id: 'news',
-    label: 'News',
-    icon: <Newspaper className="w-3.5 h-3.5" />,
-    color: 'text-muted-foreground/70 hover:text-foreground',
-    activeColor: 'text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/30',
-  },
-  {
-    id: 'code',
-    label: 'Code',
-    icon: <Code className="w-3.5 h-3.5" />,
-    color: 'text-muted-foreground/70 hover:text-foreground',
-    activeColor: 'text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/30',
-  },
-  {
-    id: 'tor',
-    label: 'Tor',
-    icon: <Shield className="w-3.5 h-3.5" />,
-    color: 'text-muted-foreground/70 hover:text-foreground',
-    activeColor: 'text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/30',
-  },
-  {
-    id: 'i2p',
-    label: 'I2P',
-    icon: <Network className="w-3.5 h-3.5" />,
-    color: 'text-muted-foreground/70 hover:text-foreground',
-    activeColor: 'text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/30',
-  },
-];
-
 const TAB_BY_ID = new Map(ALL_SOURCE_TABS.map((t) => [t.id, t]));
-
-/**
- * Out-of-the-box tab configuration: Web first (community index + clearnet
- * search). Wiki and Code tabs stay on thanks to the Nostr-native providers
- * (NIP-54 wiki pool, NIP-34 git pool); the clearnet engines behind them
- * (Wikipedia, Stack Overflow) stay off until enabled. Dark-net tabs stay
- * off — all restorable in Settings → Search Tabs.
- */
-export const DEFAULT_TAB_CONFIG = {
-  order: ALL_SOURCE_TABS.map((t) => t.id) as string[],
-  hidden: ['tor', 'i2p'],
-  defaultTab: 'web',
-};
 
 /**
  * The tab bar. Renders the user's configured tabs (order + visibility from
@@ -151,7 +61,7 @@ export function SourceTabs({ value, onChange, className, counts }: SourceTabsPro
               !isActive && 'hover:bg-accent',
             )}
           >
-            {source.icon}
+            <source.icon className="w-3.5 h-3.5" />
             {source.label}
             {count !== undefined && count > 0 && (
               <span className={cn(

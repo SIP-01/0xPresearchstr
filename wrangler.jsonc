@@ -1,13 +1,15 @@
 /**
  * Presearchstr — Cloudflare Worker config
  *
- * The worker (worker.ts) serves the static app AND the engine-AI proxy at
- * /api/ai/* — same origin, so no CORS and no key ever reaches a browser.
+ * The worker (worker.ts) serves the static app and proxies AI, search, and
+ * keyword ads under /api/* with private provider keys held server-side.
  *
  * Operator setup (engine-provided AI):
  *   1. wrangler secret put AI_API_KEY          ← your provider key (never committed)
  *   2. Set the non-secret vars below (OWNER_PUBKEY enables the Admin → AI tab)
  *   3. wrangler deploy
+ *
+ * Optional keyword ads: wrangler secret put KEYWORD_MARKET_API_KEY
  *
  * Optional — admin-UI-managed config (write the key from the Admin tab
  * instead of env vars): create a KV namespace and uncomment the binding:
@@ -22,7 +24,8 @@
   "compatibility_date": "2026-08-01",
   "assets": {
     "directory": "./dist",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
   },
   "vars": {
     // Public key (hex) allowed to administer engine AI from Admin → AI.

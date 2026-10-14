@@ -52,7 +52,7 @@ export default {
           return;
         }
 
-        const manifestPath = hrefMatch[1];
+        const manifestPath = hrefMatch[1].replace(/^%BASE_URL%/, '/');
         
         // Resolve the manifest file path relative to the project root
         const htmlDir = path.dirname(filename);

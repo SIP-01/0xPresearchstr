@@ -12,15 +12,19 @@
 
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import * as cheerio from 'cheerio';
-import robotsParser from 'robots-parser';
+import robotsParserModule from 'robots-parser';
 import PQueue from 'p-queue';
 import { createLogger } from '../../shared/src/logger.js';
 import { indexDocuments, getSearchIndex } from '../../shared/src/meili.js';
 import { checkContentPolicy } from '../../shared/src/content-policy.js';
+import { fetchPublicText } from '../../shared/src/public-fetch.js';
 import type { SearchDocument, CrawlerStatus } from '../../shared/src/types.js';
 
 const log = createLogger('clearnet-crawler');
+// robots-parser exports a CJS function, but its declaration wraps it in a default export.
+const robotsParser = robotsParserModule as unknown as typeof robotsParserModule.default;
 
 // ─── Configuration ───
 const USER_AGENT = process.env.CRAWLER_USER_AGENT || '0xPresearchstr/0.1 (+https://github.com/NostrDanish/0xPresearchstr)';
@@ -34,8 +38,10 @@ const SEED_FILE_PATH = process.env.CLEARNET_SEED_FILE || './config/seeds-clearne
 // ─── State ───
 const visited = new Set<string>();
 const queue = new PQueue({ concurrency: MAX_CONCURRENT });
+const domainRateQueues = new Map<string, PQueue>();
 const domainLastFetch = new Map<string, number>();
 const domainPageCount = new Map<string, number>();
+const domainPendingCount = new Map<string, number>();
 const robotsCache = new Map<string, ReturnType<typeof robotsParser>>();
 let batch: SearchDocument[] = [];
 
@@ -65,33 +71,34 @@ function loadSeeds(): string[] {
 }
 
 // ─── robots.txt ───
-async function getRobots(domain: string): Promise<ReturnType<typeof robotsParser>> {
-  if (robotsCache.has(domain)) {
-    return robotsCache.get(domain)!;
+async function getRobots(pageUrl: string): Promise<ReturnType<typeof robotsParser>> {
+  const origin = new URL(pageUrl).origin;
+  if (robotsCache.has(origin)) {
+    return robotsCache.get(origin)!;
   }
 
-  const robotsUrl = `https://${domain}/robots.txt`;
+  const robotsUrl = new URL('/robots.txt', origin).href;
   try {
-    const res = await fetch(robotsUrl, {
+    const res = await fetchPublicText(robotsUrl, {
       headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(5000),
+      timeoutMs: 5000,
+      maxBytes: 512 * 1024,
     });
-    const text = res.ok ? await res.text() : '';
+    const text = res.ok ? res.text : '';
     const robots = robotsParser(robotsUrl, text);
-    robotsCache.set(domain, robots);
+    robotsCache.set(origin, robots);
     return robots;
   } catch {
     // If robots.txt is unreachable, assume everything is allowed.
     const robots = robotsParser(robotsUrl, '');
-    robotsCache.set(domain, robots);
+    robotsCache.set(origin, robots);
     return robots;
   }
 }
 
 async function isAllowed(url: string): Promise<boolean> {
   try {
-    const domain = new URL(url).hostname;
-    const robots = await getRobots(domain);
+    const robots = await getRobots(url);
     return robots.isAllowed(url, USER_AGENT) ?? true;
   } catch {
     return false;
@@ -100,36 +107,57 @@ async function isAllowed(url: string): Promise<boolean> {
 
 // ─── Rate limiting ───
 async function waitForRateLimit(domain: string): Promise<void> {
-  const lastFetch = domainLastFetch.get(domain) || 0;
-  const elapsed = Date.now() - lastFetch;
-  if (elapsed < RATE_LIMIT_MS) {
-    await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_MS - elapsed));
+  let rateQueue = domainRateQueues.get(domain);
+  if (!rateQueue) {
+    rateQueue = new PQueue({ concurrency: 1 });
+    domainRateQueues.set(domain, rateQueue);
   }
-  domainLastFetch.set(domain, Date.now());
+  await rateQueue.add(async () => {
+    const elapsed = Date.now() - (domainLastFetch.get(domain) || 0);
+    if (elapsed < RATE_LIMIT_MS) {
+      await delay(RATE_LIMIT_MS - elapsed);
+    }
+    domainLastFetch.set(domain, Date.now());
+  });
 }
 
 // ─── Page fetching and parsing ───
-async function fetchPage(url: string): Promise<{ html: string; contentType: string } | null> {
-  try {
-    const domain = new URL(url).hostname;
-
-    // Check page-per-domain limit.
-    const count = domainPageCount.get(domain) || 0;
-    if (count >= MAX_PAGES_PER_DOMAIN) {
-      log.debug({ domain }, 'Max pages reached for domain');
-      return null;
+async function fetchPage(url: string): Promise<{ html: string; url: string } | null> {
+  let reservedDomain: string | undefined;
+  let skipped = false;
+  const releaseSlot = () => {
+    if (reservedDomain !== undefined) {
+      domainPendingCount.set(reservedDomain, (domainPendingCount.get(reservedDomain) || 0) - 1);
+      reservedDomain = undefined;
     }
-
-    await waitForRateLimit(domain);
-
-    const res = await fetch(url, {
+  };
+  try {
+    const res = await fetchPublicText(url, {
       headers: {
         'User-Agent': USER_AGENT,
         'Accept': 'text/html,application/xhtml+xml',
         'Accept-Language': 'en',
       },
-      signal: AbortSignal.timeout(15000),
-      redirect: 'follow',
+      timeoutMs: 15000,
+      maxBytes: MAX_CONTENT_LENGTH,
+      beforeRequest: async (destination) => {
+        const domain = destination.hostname;
+        if (domain !== reservedDomain) releaseSlot();
+        if (!(await isAllowed(destination.href))) {
+          skipped = true;
+          throw new Error('Disallowed by robots.txt');
+        }
+        if (reservedDomain === undefined) {
+          const count = (domainPageCount.get(domain) || 0) + (domainPendingCount.get(domain) || 0);
+          if (count >= MAX_PAGES_PER_DOMAIN) {
+            skipped = true;
+            throw new Error(`Max pages reached for domain: ${domain}`);
+          }
+          domainPendingCount.set(domain, (domainPendingCount.get(domain) || 0) + 1);
+          reservedDomain = domain;
+        }
+        await waitForRateLimit(domain);
+      },
     });
 
     if (!res.ok) return null;
@@ -137,17 +165,16 @@ async function fetchPage(url: string): Promise<{ html: string; contentType: stri
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('text/html')) return null;
 
-    const contentLength = parseInt(res.headers.get('content-length') || '0', 10);
-    if (contentLength > MAX_CONTENT_LENGTH) return null;
+    const domain = new URL(res.url).hostname;
+    domainPageCount.set(domain, (domainPageCount.get(domain) || 0) + 1);
 
-    const html = await res.text();
-    domainPageCount.set(domain, count + 1);
-
-    return { html, contentType };
+    return { html: res.text, url: res.url };
   } catch (err) {
-    status.errors++;
+    if (!skipped) status.errors++;
     log.debug({ err, url }, 'Failed to fetch page');
     return null;
+  } finally {
+    releaseSlot();
   }
 }
 
@@ -244,16 +271,10 @@ async function processUrl(url: string): Promise<void> {
   if (visited.has(url)) return;
   visited.add(url);
 
-  // Check robots.txt.
-  if (!(await isAllowed(url))) {
-    log.debug({ url }, 'Disallowed by robots.txt');
-    return;
-  }
-
   const page = await fetchPage(url);
   if (!page) return;
 
-  const doc = extractContent(page.html, url);
+  const doc = extractContent(page.html, page.url);
   if (!doc) return;
 
   // Content policy check.
@@ -276,20 +297,21 @@ async function enqueueUrl(url: string): Promise<void> {
 }
 
 // ─── Sitemap discovery ───
-async function discoverSitemap(domain: string): Promise<string[]> {
+async function discoverSitemap(pageUrl: string): Promise<string[]> {
   const urls: string[] = [];
   try {
-    const robots = await getRobots(domain);
+    const robots = await getRobots(pageUrl);
     const sitemapUrls = robots.getSitemaps();
 
     for (const sitemapUrl of sitemapUrls.slice(0, 3)) {
       try {
-        const res = await fetch(sitemapUrl, {
+        const res = await fetchPublicText(sitemapUrl, {
           headers: { 'User-Agent': USER_AGENT },
-          signal: AbortSignal.timeout(10000),
+          timeoutMs: 10000,
+          maxBytes: MAX_CONTENT_LENGTH,
         });
         if (!res.ok) continue;
-        const xml = await res.text();
+        const xml = res.text;
         const $ = cheerio.load(xml, { xmlMode: true });
         $('url > loc').each((_, el) => {
           const loc = $(el).text().trim();
@@ -333,7 +355,7 @@ async function main(): Promise<void> {
   for (const seed of seeds) {
     try {
       const domain = new URL(seed).hostname;
-      const sitemapUrls = await discoverSitemap(domain);
+      const sitemapUrls = await discoverSitemap(seed);
       log.info({ domain, sitemapUrls: sitemapUrls.length }, 'Discovered sitemap URLs');
       for (const url of sitemapUrls) {
         await enqueueUrl(url);

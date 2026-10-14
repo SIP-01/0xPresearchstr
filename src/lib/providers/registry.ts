@@ -11,7 +11,6 @@ import { webIndexProvider } from './web-index';
 import { cachedIndexProvider } from './cached-index';
 import { nostrProvider } from './nostr';
 import { communityProvider } from './community';
-import { stakesProvider } from './stakes';
 import { searxngProvider } from './searxng';
 import { duckduckgoProvider } from './duckduckgo';
 import { braveProvider } from './brave';
@@ -40,7 +39,6 @@ export const ALL_PROVIDERS: SearchProvider[] = [
   searxngProvider,
   webIndexProvider,
   cachedIndexProvider,
-  stakesProvider,
   communityProvider,
   nostrProvider,
   gitProvider,
@@ -68,7 +66,7 @@ export function getProvidersForSource(source: SearchSource | 'all' | 'index' | '
  * no clearnet APIs, no CORS proxies, no third-party servers.
  */
 export function getProvidersForPrivacy(
-  source: SearchSource | 'all',
+  source: SearchSource | 'all' | 'index',
   privacyOnly: boolean,
 ): SearchProvider[] {
   const providers = getProvidersForSource(source);

@@ -57,6 +57,9 @@ export const ENGINE_AI_BASE: string =
 /** Base of the engine search proxy (/api/search/* on the same worker). */
 export const ENGINE_SEARCH_BASE = `${ENGINE_AI_BASE.replace(/\/ai$/, '')}/search`;
 
+/** Ads use the same deployment backend; its API key stays in the worker. */
+export const ENGINE_ADS_BASE = `${ENGINE_AI_BASE.replace(/\/ai$/, '')}/ads`;
+
 /** Built-in free tier — shared, rate-limited PPQ key. Provider + model are
  *  locked on this tier. PUBLIC BY DESIGN (ships in the bundle): it exists so
  *  AI works with zero setup; abuse is bounded by the key's own rate limits.

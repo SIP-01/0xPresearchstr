@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
  * Generic hook for managing localStorage state
@@ -24,22 +24,32 @@ export function useLocalStorage<T>(
     }
   });
 
-  const setValue = (value: T | ((prev: T) => T)) => {
+  const stateRef = useRef(state);
+  const [hasStorageError, setHasStorageError] = useState(false);
+
+  const setValue = useCallback((value: T | ((prev: T) => T)) => {
+    const valueToStore = value instanceof Function ? value(stateRef.current) : value;
     try {
-      const valueToStore = value instanceof Function ? value(state) : value;
-      setState(valueToStore);
       localStorage.setItem(key, serialize(valueToStore));
+      setHasStorageError(false);
     } catch (error) {
       console.warn(`Failed to save ${key} to localStorage:`, error);
+      setHasStorageError(true);
     }
-  };
+    // Keep settings and account synchronization usable when persistence is unavailable.
+    stateRef.current = valueToStore;
+    setState(valueToStore);
+  }, [key, serialize]);
 
   // Sync with localStorage changes from other tabs
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === key && e.newValue !== null) {
         try {
-          setState(deserialize(e.newValue));
+          const next = deserialize(e.newValue);
+          stateRef.current = next;
+          setState(next);
+          setHasStorageError(false);
         } catch (error) {
           console.warn(`Failed to sync ${key} from localStorage:`, error);
         }
@@ -50,5 +60,5 @@ export function useLocalStorage<T>(
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [key, deserialize]);
 
-  return [state, setValue] as const;
+  return [state, setValue, hasStorageError] as const;
 }

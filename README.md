@@ -1,8 +1,8 @@
 # Presearchstr
 
-**The community-driven search engine.** Nostr first, web when needed. Presearch-style keyword staking, no tokens required. No backend required.
+**The community-driven search engine.** Nostr first, web when needed, with Precommunity keyword ads. Organic search works without a configured backend.
 
-Presearchstr is the **community fork of [0xSearchstr](https://github.com/NostrDanish/0xSearchstr.git)**, re-imagined as the Nostr-native version of [Presearch](https://presearch.com): community-owned search with keyword staking — but the stake is your Nostr key, not a token.
+Presearchstr is the **community fork of [0xSearchstr](https://github.com/NostrDanish/0xSearchstr.git)**, inspired by [Presearch](https://presearch.com): a shared Nostr search index with keyword advertising managed through [Precommunity](https://precommunity.org/keyword-market).
 
 [![Edit with Shakespeare](https://shakespeare.diy/badge.svg)](https://shakespeare.diy/clone?url=https%3A%2F%2Fgithub.com%2FNostrDanish%2F0xPresearchstr.git)
 
@@ -78,11 +78,11 @@ User Search
        ▼
  ┌─────────────── All providers run in parallel ──────────────┐
  │                                                             │
- │  Web Index  Federated  Nostr   Keyword  SearXNG  Wiki  Tor  │
- │  (SIP-01)   Cache      NIP-50  Stakes     │        │    │   │
+ │  Web Index  Federated  Nostr   Community  SearXNG  Wiki Tor │
+ │  (SIP-01)   Cache      NIP-50     │        │        │   │   │
  │  39697      30078        │        │    DuckDuckGo HN StackOverflow
- │    │           │         │        │        │        │    │  │
- │    ▼           ▼         ▼        ▼        ▼        ▼    ▼  │
+ │    │           │         │        │        │        │   │   │
+ │    ▼           ▼         ▼        ▼        ▼        ▼   ▼   │
  │   SearchResult[] from each provider                         │
  │                                                             │
  └──────────────────────┬──────────────────────────────────────┘
@@ -110,7 +110,9 @@ Instead of building another centralized search engine, Presearchstr is a **searc
 4. **Auto-indexing** — every search contributes its surfaced pages back to the shared SIP-01 index
 5. **Never leaves you empty** — fallback links to privacy-respecting search engines
 
-Everything runs in the browser. No backend, no crawler, no tracking.
+Organic aggregation and ranking run in the browser. The engine backend provides
+Precommunity ads and optional engine-provided search or AI credentials. Ads resolve
+separately and never enter the organic result pipeline.
 
 ### Auto-Indexing (Community Index)
 
@@ -140,36 +142,50 @@ Search "best monero wallet"
 The legacy query cache (kind 30078, signed by the trusted indexer keys above) is still
 read in parallel for backwards compatibility — but SIP-01 is where the index grows.
 
-**Your queries are never published in plaintext.** "Trending searches" are built from
+**Queries are not published as plaintext index observations.** "Trending searches" are built from
 one-way term signals: each device publishes only `sha256(normalized query)` under its
 pseudonymous indexing identity. A term's plaintext is revealed by the network only
 once **3+ independent devices** searched it (the reveal is self-verifying — readers
-re-hash the plaintext and compare). Rare or confidential queries never appear in
-plaintext anywhere, and sensitive query classes (NIP-19 ids, NIP-05 addresses, URLs,
+re-hash the plaintext and compare). Rare queries do not appear as plaintext trending
+events, and sensitive query classes (NIP-19 ids, NIP-05 addresses, URLs,
 math) are never signaled at all. See [NIP.md](NIP.md).
 
-### Keyword Staking (Presearch, but Nostr)
+### PRE community Privacy Ads
 
-Presearch's signature feature, rebuilt for Nostr. Instead of staking PRE tokens on a
-keyword, you stake **your identity**:
+PRE community, the community around the PRE token, resolves blockchain keyword
+ad data through our backend using only the search query. Submitted text searches can display one
+**Sponsored · PRE community** card in **Web**
+and **All**, below any instant or AI answers and above organic results. Keyword
+advertising is managed at [Precommunity Keyword Market](https://precommunity.org/keyword-market).
 
-```
-Stake "monero wallet" → your link
-       │
-       ├─→ Sign kind 30078 event with YOUR Nostr key
-       │     d-tag: "0xsearchstr:stake:monero wallet"
-       │
-       └─→ Anyone searching "monero wallet" — on any compatible client —
-           sees your link as the top "Community Stake" placement
-```
+The browser calls `GET /api/ads/precommunity?q=…` on the engine backend. The worker
+calls Precommunity's resolve API with a server-only `KEYWORD_MARKET_API_KEY` and
+returns `{ ad: PrecommunityAd | null }`. An ad has `headline`, `description`, `url`,
+`clickUrl`, and `reportUrl` fields. When a lookup completes with `ad: null` or an
+error, the card instead shows **Your ad could be here**, inviting website promotion
+for the submitted query with an **Advertise on PRE community** link to the Keyword
+Marketplace. This invitation does not assert that the keyword is available and
+does not block organic search.
 
-- **One stake per keyword per npub** — re-staking replaces your previous stake
-- **No tokens, no auction** — signatures make stakes attributable and Sybil-aware
-- **Fork-portable** — stakes live in the shared `0xsearchstr` namespace, so they show on 0xSearchstr and every compatible client
-- Click **"Stake this keyword"** on any results page (or the empty state) to claim a keyword
+- Ads are independent of result counts, ranking, votes, Nostr indexing, and AI evidence.
+- Pagination and switching between Web and All retain the same ad for the submitted query.
+- PRE community advertising is an explicit Privacy Mode exception: eligible submitted
+  text searches in Web and All still resolve ads and show ads or marketplace invitations.
+  Organic search uses Nostr-tier providers only and AI answers remain disabled in this mode.
+  The invitation stays hidden during the initial lookup, on other tabs, and for
+  special query classes (NIP-19, NIP-05, URLs, and math), which do not resolve ads.
+- Ad clicks open `clickUrl` in a new tab; reports open `reportUrl`. All links require
+  HTTPS, and click/report links are restricted to `precommunity.org`.
+- Historical Nostr keyword stakes remain in **Explore → Keyword Stakes Archive** and
+  admin statistics. They no longer receive search placement; their schema and existing
+  events are preserved in [NIP.md](NIP.md).
 
-The ranking between competing stakes is recency-based today; the schema leaves room for
-zap-weighted ranking later without a breaking change. See [NIP.md](NIP.md).
+**Privacy:** eligible Web/All text queries still resolve ads in Privacy Mode.
+Our backend can observe the query and browser IP; its API request to PRE community
+forwards only search text, without the Nostr account, browser cookies, or user IP headers.
+Ad/report links connect the browser directly to PRE community; ad clicks are counted.
+Ordinary clearnet providers and AI remain disabled in Privacy Mode, and unsupported
+query classes do not reach the advertising API.
 
 ---
 
@@ -184,6 +200,22 @@ npm run dev
 
 Open `http://localhost:8080` and search.
 
+The Vite-only command above does not run the worker API. To try ads locally, place
+the operator's key in the ignored `.dev.vars` file at the repository root:
+
+```dotenv
+KEYWORD_MARKET_API_KEY=<your Precommunity API key>
+```
+
+Then build the frontend and serve both the app and its API through the worker:
+
+```bash
+npm run build
+npx wrangler@4 dev --port 8080
+```
+
+Never prefix this secret with `VITE_` or add it to committed configuration.
+
 ---
 
 ## Provider Architecture
@@ -195,7 +227,6 @@ src/lib/providers/
 ├── cached-index.ts   ← Federated Nostr cache (legacy kind 30078, trusts all indexers)
 ├── nostr.ts          ← NIP-50 relay search
 ├── community.ts      ← User-curated index submissions + Nostra interop
-├── stakes.ts         ← Keyword stakes (Presearch-style top placements)
 ├── searxng.ts        ← SearXNG meta-search with failover
 ├── duckduckgo.ts     ← DuckDuckGo HTML scraper
 ├── brave.ts          ← Brave Search API (BYOK — lead engine when a key is set)
@@ -231,7 +262,6 @@ interface SearchProvider {
 |----------|--------|-----|-------|
 | **Web Index** | SIP-01 kind 39697 | WebSocket | Shared per-document index, any indexer, ranked by relevance + independent observations |
 | **Nostr** | NIP-50 relays | WebSocket | Profiles, notes, articles, wiki (NIP-54), files (NIP-94), torrents (NIP-35), code snippets (NIP-C0) |
-| **Keyword Stakes** | Community stakes | WebSocket | Presearch-style staked keyword placements |
 | **Community** | User submissions | WebSocket | Curated links + Nostra interop + NIP-B0 web bookmarks |
 | **SearXNG** | Discovered instance pool (top 4 auto-picked, language-aware) | CORS proxy | The fallback band — DDG, Brave, Wikipedia, and dozens more behind it |
 | **DuckDuckGo** | HTML scraper | CORS proxy | The default lead web engine (unless a Brave key is set) |
@@ -244,6 +274,8 @@ interface SearchProvider {
 | **Wikipedia** | MediaWiki API | Direct (CORS) | **Off by default** — enable in Settings → Engines |
 | **Stack Overflow** | StackExchange API | Direct (CORS) | **Off by default** — enable in Settings → Engines |
 | **Tor (Ahmia)** | HTML scraping | CORS proxy | **Off by default** — policy-compliant .onion search |
+
+Precommunity ads are a separate backend-resolved placement, not a `SearchProvider`.
 
 ### Dynamic SearXNG Instance Pool (searxist-style)
 
@@ -292,7 +324,7 @@ Every result card carries 👍/👎 votes and a report flag:
 - **Votes** are NIP-25 reactions (kind 7, `e` tag for events, `r` tag for URLs —
   SIP-01-normalized so the same page tallies together). **Anonymous by default**:
   signed by this device's built-in indexing identity, never your npub. Flip
-   "Vote with my npub" in Settings → Auto Indexer to vote attributably (like staking).
+   "Vote with my npub" in Settings → Auto Indexer to vote attributably.
 - **Reports** are NIP-56 kind 1984 events — from the Policy page or any result
   card's flag — landing in the team's `/admin` inbox for one-click moderation.
 
@@ -358,7 +390,7 @@ Roles (resolved live from owner-signed kind 30078 role lists, relay-finder patte
 | **Admin** | Stats, Reports, Moderation, Filter test |
 | **Moderator** | Stats, Reports, Moderation, Filter test |
 
-- **Stats** — indexed pages, cached queries, stakes, open reports, relay pool sizes
+- **Stats** — indexed pages, cached queries, archived keyword stakes, open reports, relay pool sizes
 - **Reports** — the NIP-56 abuse inbox (kind 1984, `0xsearchstr.abuse` namespace),
   one-click "hide from results"
 - **Moderation** — team-signed NIP-32 labels (kind 1985, `0xsearchstr.moderation`)
@@ -387,8 +419,8 @@ every relay has a reason for being used, reads are resilient, writes are
 controlled:
 
 ```
-indexRead / indexWrite   SIP-01 index pool — observations, cache, submissions,
-                         stakes; writes land exactly where reads happen
+indexRead / indexWrite   SIP-01 index pool — observations and submissions;
+                         legacy cache and keyword stakes remain readable
 searchRead               NIP-50 full-text pool (read-only — nothing is written)
 controlRead / Write      app control plane (moderation labels, role lists,
                          abuse inbox) = index + search pools + app defaults
@@ -404,7 +436,7 @@ federation namespaces (`0xsearchstr:*` protocol data, shared by design).
 
 | Pool | Purpose | Defaults |
 |------|---------|----------|
-| **Index Relays** | Where the community index lives — SIP-01 observations (kind 39697), legacy query cache, community submissions, and keyword stakes are published to **and** read from these. Every browser running the app is a crawler node; this is its peer list. | `relay-na1.metanomalist.com` (NIP-50 + NIP-77 index relay), the UNCAGED SIP cluster (`test-sip-relay.sip-01test`, `sip-relay-2.sip-booster-relay`, `sip-relay-3.uncaged-sip`, `sip-relay-4.sip-relay-4` — serverless SIP-01 index relays), `relay.ditto.pub`, `jskitty.cat/nostr`, `search.nos.today`, `relay.primal.net` + auto-discovered SIP-01 relays |
+| **Index Relays** | Where the community index lives — SIP-01 observations (kind 39697) and community submissions are published and read; legacy query cache and archived keyword stakes remain readable. Every browser running the app can be an indexing node; this is its peer list. | `relay-na1.metanomalist.com` (NIP-50 + NIP-77 index relay), the UNCAGED SIP cluster (`test-sip-relay.sip-01test`, `sip-relay-2.sip-booster-relay`, `sip-relay-3.uncaged-sip`, `sip-relay-4.sip-relay-4` — serverless SIP-01 index relays), `relay.ditto.pub`, `jskitty.cat/nostr`, `search.nos.today`, `relay.primal.net` + auto-discovered SIP-01 relays |
 | **Search Relays** | NIP-50 full-text Nostr search (read-only) | `relay.ditto.pub`, `relay-na1.metanomalist.com`, the UNCAGED SIP cluster, `relay.nostr.band`, `search.nos.today`, `relay.noswhere.com`, `relay.pocketnostr.com` + auto-discovered NIP-50 relays |
 | **Git Relays** | NIP-34 repos/issues/PRs/patches for the Code tab (read-only) | `ngit.danconwaydev.com`, `gitnostr.com`, `relay.ngit.dev`, `indexer.coracle.social`, `index.ngit.dev`, `git.shakespeare.diy` |
 | **Wiki Relays** | NIP-54 wiki articles (read-only) — the pool wikistr reads | `relay.wikifreedia.xyz`, `nostr.wine`, `nostr21.com` |
@@ -427,9 +459,9 @@ tabs show, drag them into their own order, and star the tab a fresh visit starts
 
 | Tab | Sources | Default |
 |-----|---------|---------|
-| **Web** | Web Index (SIP-01) + Stakes + Community + SearXNG + DuckDuckGo + Brave (BYOK) | ✅ visible, **default tab** |
+| **Web** | Web Index (SIP-01) + Community + SearXNG + DuckDuckGo + Brave (BYOK); separate Precommunity ad | ✅ visible, **default tab** |
 | **Index** | The community index only — SIP-01 observations + legacy cache | ✅ visible |
-| **All** | All providers merged + ranked (stakes on top) | ✅ visible |
+| **All** | All providers merged + ranked; separate Precommunity ad | ✅ visible |
 | **Nostr** | Profiles, notes, articles, Wikifreedia, files | ✅ visible |
 | **News** | Hacker News stories | ✅ visible |
 | **Wiki** | Nostr wiki articles (NIP-54, wikistr relay pool); Wikipedia engine off until enabled | ✅ visible |
@@ -449,8 +481,8 @@ score (word coverage + phrase/title bonuses) ranks what survives.
 The merged result list is then **coverage-ranked**: every result is reweighted by how many
 of your words it actually contains — 50% title, 50% body (snippet + domain + tags + full
 article text for Nostr-backed results). All four words of "walk in the park" beats three
-beats two beats one; loose engine hits with zero word overlap sink to the bottom. Keyword
-stakes are exempt (exact-match placement is their contract).
+beats two beats one; loose engine hits with zero word overlap sink to the bottom.
+Precommunity ads never enter this ranking.
 
 ---
 
@@ -484,14 +516,14 @@ The self-hosted backend enforces content policy modeled on [Ahmia](https://ahmia
 
 ## Protocol
 
-Everything this app writes to Nostr is documented in [NIP.md](NIP.md) and the canonical
+The Nostr schemas this app uses are documented in [NIP.md](NIP.md) and the canonical
 [SIP-01 spec](https://github.com/NostrDanish/SIP-01) (local: [docs/SIP-01.md](docs/SIP-01.md)):
 
 - **Web document index** (`widx:*`) — SIP-01, kind 39697, per-device indexer identities
 - **Search cache** (`0xsearchstr:cache:*`) — federated auto-index, kind 30078 (legacy, frozen)
 - **Term signals** (`0xsearchstr:term:*`) — hashed k-anonymity trending, kind 30078 (no plaintext queries)
 - **Community submissions** (`0xsearchstr:submit:*`) — user-curated links, kind 30078
-- **Keyword stakes** (`0xsearchstr:stake:*`) — Presearch-style keyword placement, kind 30078
+- **Keyword stakes** (`0xsearchstr:stake:*`) — historical archive, kind 30078; search placement retired
 - **Nostra Search interop** (read-only) — including NOSTRA_ENC_V1 payloads
 
 We also read/write existing NIPs wherever they fit instead of inventing formats:
@@ -561,6 +593,41 @@ AI unavailable                   ← only for forks that remove the built-in key
 
 The `AIProvider` interface (`src/lib/ai/`) mirrors the search `SearchProvider`
 registry — add a provider in one file and it works.
+
+### Operator setup: Precommunity keyword ads
+
+Use the included `worker.ts` and `wrangler.jsonc`. Configure the API key as a
+Cloudflare secret, then build and deploy:
+
+Deploying the frontend's `dist/` through Shakespeare does not deploy this
+repository's `worker.ts`. The existing hosting/backend operator must configure
+`KEYWORD_MARKET_API_KEY` and deploy the Worker. If it uses a separate domain, the
+frontend operator can point the build's non-secret `VITE_ENGINE_API_BASE` at that
+backend's `/api/ai` URL. This is an operator handoff; site users do not need to
+sign in to Cloudflare or create a hosting account.
+
+```bash
+npx wrangler@4 secret put KEYWORD_MARKET_API_KEY
+npm run build
+npx wrangler@4 deploy
+```
+
+Wrangler prompts for the secret; never put its value in source, `wrangler.jsonc`,
+`VITE_*`, logs, or frontend responses. The worker routes `/api/*` before static
+assets, validates the ad response, allows only HTTPS links, applies a five-second
+timeout and a separate limit of 20 ad requests per minute per IP, and responds
+with `Cache-Control: no-store`.
+
+On `presearchstr.com` and `www.presearchstr.com`, the existing static frontend
+calls `https://presearchstr.presearchstr.workers.dev/api/ads/precommunity`.
+Other hosts use same-origin `/api/ads/precommunity`. Forks with a separate worker
+can set the non-secret build variable
+`VITE_ENGINE_API_BASE=https://your-worker.workers.dev/api/ai`; ads derive their
+`/api/ads` base from the same setting. Allow the frontend origin in the worker's
+existing CORS configuration. The static frontend deployment process is unchanged.
+
+Missing configuration or an ad lookup failure shows the marketplace invitation
+after the lookup finishes; organic search continues independently.
 
 ### Operator setup: engine-provided AI
 

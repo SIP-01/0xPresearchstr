@@ -26,6 +26,7 @@ import {
 } from '@/lib/communityIndex';
 import { parseQuery } from '@/lib/queryParser';
 import { evaluateQuery, docFromSearchResult } from '@/lib/queryEngine';
+import { normalizeIndexUrl } from '@/lib/webIndex';
 import type { SearchProvider, SearchOptions, ProviderSearchResponse, SearchResult } from './types';
 
 /** How many recent events to pull per family before client-side filtering. */
@@ -75,7 +76,7 @@ export const communityProvider: SearchProvider = {
 
     // Parse: bookmarks + 0xsearchstr-protocol submissions are sync;
     // Nostra payloads may need decryption.
-    const parsed = await Promise.all(
+    const parsed = await Promise.allSettled(
       [...events.values()].map(async (ev) => {
         if (ev.kind === BOOKMARK_KIND) return parseBookmarkEvent(ev);
         const isNostra = ev.tags.some(([n, v]) => n === 'd' && v === NOSTRA_D_TAG);
@@ -85,9 +86,11 @@ export const communityProvider: SearchProvider = {
 
     // Dedupe by URL (keep newest), filter by query, sort by recency.
     const byUrl = new Map<string, SearchResult>();
-    for (const result of parsed) {
+    for (const entry of parsed) {
+      if (entry.status !== 'fulfilled') continue;
+      const result = entry.value;
       if (!result || !matchesQuery(result, query)) continue;
-      const key = result.url.toLowerCase();
+      const key = normalizeIndexUrl(result.url) ?? result.url;
       const existing = byUrl.get(key);
       if (!existing || (result.timestamp ?? 0) > (existing.timestamp ?? 0)) {
         byUrl.set(key, result);

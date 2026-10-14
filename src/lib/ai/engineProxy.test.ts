@@ -2,8 +2,9 @@
  * Engine-AI proxy logic tests — the security-critical invariants of
  * worker.ts, verified without a server runtime.
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools/pure';
+import worker from '../../../worker';
 
 import {
   buildPublicStatus,
@@ -218,5 +219,231 @@ describe('readEngineConfig / writeEngineConfig', () => {
 
   it('writeEngineConfig(false-y KV) reports no-op instead of throwing', async () => {
     expect(await writeEngineConfig(undefined, CONFIG)).toBe(false);
+  });
+});
+
+describe('cross-origin admin writes', () => {
+  it('includes CORS on a successful authenticated save after the preflight', async () => {
+    const url = 'https://engine.example/api/ai/admin';
+    const origin = 'https://presearchstr.com';
+    const secret = generateSecretKey();
+    const store = new Map<string, string>();
+    const env = {
+      OWNER_PUBKEY: getPublicKey(secret),
+      AI_CONFIG_KV: {
+        get: async (key: string) => store.get(key) ?? null,
+        put: async (key: string, value: string) => { store.set(key, value); },
+        delete: async (key: string) => { store.delete(key); },
+      },
+    };
+    const event = finalizeEvent({
+      kind: 27235,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [['u', url], ['method', 'POST']],
+      content: JSON.stringify({ action: 'set', apiKey: CONFIG.apiKey, endpoint: CONFIG.endpoint, model: CONFIG.model }),
+    }, secret);
+
+    const preflight = await worker.fetch(new Request(url, {
+      method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Method': 'POST' },
+    }), env);
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+
+    const response = await worker.fetch(new Request(url, {
+      method: 'POST', headers: { Origin: origin, Authorization: `Nostr ${btoa(JSON.stringify(event))}` },
+    }), env);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+    expect(store.size).toBe(1);
+    expect(await response.json()).toMatchObject({ ok: true, status: { configured: true } });
+  });
+});
+
+describe('Precommunity keyword ads proxy', () => {
+  const env = { KEYWORD_MARKET_API_KEY: 'pkm-fake-server-secret' };
+  const ad = {
+    headline: 'Bitcoin community',
+    description: 'Learn about Bitcoin.',
+    url: 'https://bitcoin.org/',
+    clickUrl: 'https://precommunity.org/api/v1/keyword-market/revisions/test/click?delivery=opaque-token',
+    reportUrl: 'https://precommunity.org/keyword-market/reports/test',
+  };
+  let requestNumber = 0;
+
+  function request(q: string | null = 'bitcoin', init: RequestInit = {}): Request {
+    const url = new URL('https://engine.example/api/ads/precommunity');
+    if (q !== null) url.searchParams.set('q', q);
+    const headers = new Headers(init.headers);
+    if (!headers.has('CF-Connecting-IP')) headers.set('CF-Connecting-IP', `ads-test-${++requestNumber}`);
+    return new Request(url, { ...init, headers });
+  }
+
+  function mockResponse(body: unknown = { ad }, status = 200) {
+    const upstream = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(body), { status }));
+    vi.stubGlobal('fetch', upstream);
+    return upstream;
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('forwards only encoded q to the fixed endpoint with a server-only key and no redirects', async () => {
+    const upstream = mockResponse({ ad, apiKey: env.KEYWORD_MARKET_API_KEY });
+    const origin = 'https://presearchstr.com';
+    const incoming = request('  bitcoin & lightning/#ą  ', { headers: { Origin: origin } });
+    const response = await worker.fetch(incoming, env);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ad });
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+    expect(response.headers.get('Vary')).toBe('Origin');
+    expect(upstream).toHaveBeenCalledOnce();
+    const [target, init] = upstream.mock.calls[0];
+    expect(String(target)).toBe('https://precommunity.org/api/v1/keyword-market/resolve?q=bitcoin+%26+lightning%2F%23%C4%85');
+    expect(new Headers(init?.headers).get('X-API-Key')).toBe(env.KEYWORD_MARKET_API_KEY);
+    expect(new Headers(init?.headers).get('Accept')).toBe('application/json');
+    expect(init?.redirect).toBe('manual');
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it.each([null, '', '   ', 'x'.repeat(401), 'nsec1never-send-a-secret'])('rejects invalid query %j before an upstream call', async (q) => {
+    const upstream = mockResponse();
+    const response = await worker.fetch(request(q), env);
+    expect(response.status).toBe(400);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('accepts exactly 400 query characters', async () => {
+    const upstream = mockResponse({ ad: null });
+    const response = await worker.fetch(request('x'.repeat(400)), env);
+    expect(response.status).toBe(200);
+    expect(new URL(String(upstream.mock.calls[0][0])).searchParams.get('q')).toHaveLength(400);
+  });
+
+  it('returns no ad when the provider has no match', async () => {
+    mockResponse({ ad: null });
+    const response = await worker.fetch(request(), env);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ad: null });
+  });
+
+  it('does not call upstream when the server secret is absent', async () => {
+    const upstream = mockResponse();
+    const response = await worker.fetch(request(), {});
+    expect(response.status).toBe(503);
+    expect(upstream).not.toHaveBeenCalled();
+    expect(await response.text()).not.toContain(env.KEYWORD_MARKET_API_KEY);
+  });
+
+  it.each([
+    {},
+    { ad: { ...ad, headline: 123 } },
+    { ad: { ...ad, url: 'javascript:alert(1)' } },
+    { ad: { ...ad, url: 'http://bitcoin.org/' } },
+    { ad: { ...ad, url: 'https://127.0.0.1/' } },
+    { ad: { ...ad, clickUrl: 'https://precommunity.org.evil.example/click' } },
+    { ad: { ...ad, reportUrl: 'https://evil.example/report' } },
+    { ad: { ...ad, clickUrl: 'https://username:password@precommunity.org/click' } },
+    { ad: { ...ad, headline: env.KEYWORD_MARKET_API_KEY } },
+  ])('rejects invalid or secret-bearing ad payloads', async (body) => {
+    mockResponse(body);
+    const response = await worker.fetch(request(), env);
+    expect(response.status).toBe(502);
+    const text = await response.text();
+    expect(text).not.toContain(env.KEYWORD_MARKET_API_KEY);
+    expect(text).not.toContain('javascript:');
+    expect(text).not.toContain('evil.example');
+  });
+
+  it('handles invalid provider JSON without echoing it', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(env.KEYWORD_MARKET_API_KEY)));
+    const response = await worker.fetch(request(), env);
+    expect(response.status).toBe(502);
+    expect(await response.text()).not.toContain(env.KEYWORD_MARKET_API_KEY);
+  });
+
+  it.each([301, 302, 303, 307, 308, 401, 403, 429, 500, 502])('sanitizes provider HTTP %i errors', async (status) => {
+    mockResponse({ error: `provider echoed ${env.KEYWORD_MARKET_API_KEY}` }, status);
+    const response = await worker.fetch(request(), env);
+    expect(response.status).toBe(status === 429 ? 429 : 502);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(await response.text()).not.toContain(env.KEYWORD_MARKET_API_KEY);
+  });
+
+  it('sanitizes network failures', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new Error(env.KEYWORD_MARKET_API_KEY)));
+    const response = await worker.fetch(request(), env);
+    expect(response.status).toBe(502);
+    expect(await response.text()).not.toContain(env.KEYWORD_MARKET_API_KEY);
+  });
+
+  it.each(['timeout', 'request'] as const)('cancels upstream on %s abort', async (reason) => {
+    const timeout = new AbortController();
+    const incoming = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+    let forwardedSignal: AbortSignal | null | undefined;
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation((_url, init) => {
+      forwardedSignal = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      });
+    }));
+    const pending = worker.fetch(request('bitcoin', { signal: incoming.signal }), env);
+    (reason === 'timeout' ? timeout : incoming).abort();
+    const response = await pending;
+    expect(timeoutSpy).toHaveBeenCalledWith(5_000);
+    expect(forwardedSignal?.aborted).toBe(true);
+    expect(response.status).toBe(502);
+  });
+
+  it('limits ad lookups independently of search requests', async () => {
+    const upstream = mockResponse({ ad: null });
+    const ip = `rate-test-${++requestNumber}`;
+    for (let i = 0; i < 20; i++) {
+      const response = await worker.fetch(request('bitcoin', { headers: { 'CF-Connecting-IP': ip } }), env);
+      expect(response.status).toBe(200);
+    }
+    const response = await worker.fetch(request('bitcoin', { headers: { 'CF-Connecting-IP': ip } }), env);
+    expect(response.status).toBe(429);
+    expect(upstream).toHaveBeenCalledTimes(20);
+
+    const searchResponse = await worker.fetch(new Request('https://engine.example/api/search/brave?q=bitcoin', {
+      headers: { 'CF-Connecting-IP': ip },
+    }), { BRAVE_API_KEY: 'brave-fake-key' });
+    expect(searchResponse.status).toBe(200);
+  });
+
+  it('rejects unapproved origins before contacting the provider', async () => {
+    const upstream = mockResponse();
+    for (const method of ['GET', 'OPTIONS']) {
+      const response = await worker.fetch(request('bitcoin', { method, headers: { Origin: 'https://evil.example' } }), env);
+      expect(response.status).toBe(403);
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+    }
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('allows same-origin requests and approved CORS preflights', async () => {
+    const upstream = mockResponse();
+    const sameOrigin = await worker.fetch(request('bitcoin', { headers: { Origin: 'https://engine.example' } }), env);
+    expect(sameOrigin.status).toBe(200);
+    const preflight = await worker.fetch(request('bitcoin', {
+      method: 'OPTIONS', headers: { Origin: 'https://presearchstr.com', 'Access-Control-Request-Method': 'GET' },
+    }), env);
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('Access-Control-Allow-Origin')).toBe('https://presearchstr.com');
+    expect(upstream).toHaveBeenCalledOnce();
+  });
+
+  it('rejects unsupported methods instead of returning the SPA', async () => {
+    const upstream = mockResponse();
+    const response = await worker.fetch(request('bitcoin', { method: 'POST', headers: { Origin: 'https://presearchstr.com' } }), env);
+    expect(response.status).toBe(405);
+    expect(response.headers.get('Allow')).toBe('GET, OPTIONS');
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://presearchstr.com');
+    expect(upstream).not.toHaveBeenCalled();
   });
 });

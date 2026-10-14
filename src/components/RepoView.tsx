@@ -249,7 +249,7 @@ export function RepoView({ event, nip19Id }: { event: NostrEvent; nip19Id: strin
           {/* Clone */}
           <div className="space-y-1.5">
             {cloneUrls.map((url) => (
-              <CloneRow key={url} command={`git clone ${url}`} />
+              <CloneRow key={url} command={`git clone -- '${url.replaceAll("'", "'\\''")}'`} />
             ))}
             <CloneRow command={nostrClone} note="ngit / git-remote-nostr" />
             {cloneUrls.length === 0 && (

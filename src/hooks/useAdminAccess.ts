@@ -11,6 +11,7 @@
  * useAdminAccess.
  */
 import { useQuery } from '@tanstack/react-query';
+import type { NostrEvent } from '@nostrify/nostrify';
 
 import { queryRelayPool } from '@/lib/searchRelays';
 import {
@@ -24,15 +25,10 @@ import {
 } from '@/lib/moderation';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
-/** Fetch the owner-signed role lists. Cached — they change rarely.
- *  Only runs when someone is logged in (roles are meaningless logged out,
- *  and the query would hit ~15 relays for every visitor). */
+/** Public moderation depends on these lists, including for logged-out visitors. */
 export function useRoleLists(): { admins: string[]; mods: string[]; isLoading: boolean } {
-  const { user } = useCurrentUser();
-
   const { data, isLoading } = useQuery({
     queryKey: ['admin-roles'],
-    enabled: !!user,
     queryFn: async ({ signal }) => {
       const settled = await queryRelayPool(
         getModerationRelayUrls(),
@@ -45,23 +41,27 @@ export function useRoleLists(): { admins: string[]; mods: string[]; isLoading: b
         { signal },
       );
 
-      let admins: string[] = [];
-      let mods: string[] = [];
+      const latest = new Map<string, NostrEvent>();
 
       for (const value of settled) {
         for (const ev of value) {
+          if (ev.kind !== ROLES_KIND || ev.pubkey !== OWNER_PUBKEY) continue;
           const d = ev.tags.find(([n]) => n === 'd')?.[1];
-          if (d === ADMIN_ROLES_D_TAG) {
-            const list = parseRoleList(ev);
-            if (list.length > 0 || admins.length === 0) admins = list;
-          } else if (d === MOD_ROLES_D_TAG) {
-            const list = parseRoleList(ev);
-            if (list.length > 0 || mods.length === 0) mods = list;
+          if (d !== ADMIN_ROLES_D_TAG && d !== MOD_ROLES_D_TAG) continue;
+          const previous = latest.get(d);
+          if (!previous || ev.created_at > previous.created_at
+            || (ev.created_at === previous.created_at && ev.id < previous.id)) {
+            latest.set(d, ev);
           }
         }
       }
 
-      return { admins, mods };
+      const admins = latest.get(ADMIN_ROLES_D_TAG);
+      const mods = latest.get(MOD_ROLES_D_TAG);
+      return {
+        admins: admins ? parseRoleList(admins) : [],
+        mods: mods ? parseRoleList(mods) : [],
+      };
     },
     staleTime: 5 * 60_000,
     retry: 1,

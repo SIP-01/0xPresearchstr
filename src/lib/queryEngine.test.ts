@@ -3,7 +3,10 @@
  * SIP-01-shaped search-quality dataset (every query asserts WHICH documents
  * match, not just THAT something matches).
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { createElement, useState, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { parseQuery } from '@/lib/queryParser';
@@ -14,8 +17,38 @@ import {
   applyHardConstraints,
 } from '@/lib/queryEngine';
 import { sortByQueryRelevance } from '@/lib/resultRank';
+import { termMatches } from '@/lib/queryMatch';
 import type { IndexObservation } from '@/lib/webIndex';
 import type { SearchResult } from '@/lib/providers/types';
+import type { SearchProvider } from '@/lib/providers/types';
+import { deduplicateResults, useProviderSearch } from '@/hooks/useProviderSearch';
+
+const searchState = vi.hoisted(() => ({
+  disabledProviders: [] as string[],
+  providers: [] as SearchProvider[],
+  indexResults: vi.fn(),
+}));
+
+vi.mock('@/hooks/useAppContext', () => ({
+  useAppContext: () => ({ config: {
+    privacyMode: false, languageFilter: [], disabledProviders: searchState.disabledProviders,
+  } }),
+}));
+vi.mock('@/hooks/useModeration', () => ({ useModerationSet: () => null }));
+vi.mock('@/hooks/useSearchIndexer', () => ({
+  useSearchIndexer: () => ({ indexResults: searchState.indexResults }),
+}));
+vi.mock('@/lib/providers/registry', () => ({
+  getProvidersForPrivacy: () => searchState.providers,
+  getProvidersForSource: () => searchState.providers,
+}));
+
+afterEach(() => {
+  cleanup();
+  searchState.disabledProviders = [];
+  searchState.providers = [];
+  searchState.indexResults.mockClear();
+});
 
 /* ------------------------------------------------------------------ */
 /* Deterministic test dataset (SIP-01 observations)                    */
@@ -187,6 +220,9 @@ describe('text gate (legacy plain-query semantics)', () => {
 
   it('plural folding still works', () => {
     expectMatchSet('nostr guides', ['danish', 'blogTagged']);
+    for (const [plural, singular] of [['guides', 'guide'], ['pages', 'page'], ['buses', 'bus'], ['queries', 'query']]) {
+      expect(termMatches(` ${singular} `, plural)).toBe(true);
+    }
   });
 });
 
@@ -406,13 +442,19 @@ describe('ranking ladder (resultRank)', () => {
   it('orders phrase > title > full coverage > partial', () => {
     const partial = mkResult('partial', { title: 'Some page', snippet: 'A decentralized system' });
     const full = mkResult('full', { title: 'Some page', snippet: 'Decentralized systems, search engines' });
-    const title = mkResult('title', { title: 'Decentralized Search explained', snippet: 'A guide' });
+    const title = mkResult('title', { title: 'Decentralized systems and Search explained', snippet: 'A guide' });
     // phrase and title land inside the ±5 recency tie-band at this base —
     // the phrase fixture wins the band on recency (deterministic).
     const phrase = { ...mkResult('phrase', { title: 'Some page', snippet: 'A decentralized search engine' }), timestamp: 1001 };
 
-    const sorted = sortByQueryRelevance([partial, full, title, phrase], '"decentralized search"');
+    const sorted = sortByQueryRelevance([partial, full, title, phrase], 'decentralized search');
     expect(sorted.map((r) => r.id)).toEqual(['phrase', 'title', 'full', 'partial']);
+  });
+
+  it('prefers an exact phrase in the title over the same phrase in the body', () => {
+    const title = mkResult('title-phrase', { title: 'Decentralized Search explained', snippet: 'A guide' });
+    const body = mkResult('body-phrase', { title: 'Some page', snippet: 'A decentralized search engine' });
+    expect(sortByQueryRelevance([body, title], '"decentralized search"')[0].id).toBe('title-phrase');
   });
 
   it('keyword-stake results are exempt from re-ranking', () => {
@@ -423,6 +465,63 @@ describe('ranking ladder (resultRank)', () => {
     const other = mkResult('other', { title: 'nostr privacy', snippet: 'nostr privacy' });
     const sorted = sortByQueryRelevance([stake, other], 'nostr privacy');
     expect(sorted[0].id).toBe('stake');
+  });
+});
+
+describe('search result identity and provider changes', () => {
+  const result = (id: string, url: string, provider = 'test'): SearchResult => ({
+    id, url, provider, title: 'Nostr guide', snippet: 'Nostr guide', source: 'web', score: 80,
+  });
+  const provider = (id: string, search: SearchProvider['search']): SearchProvider => ({
+    id, name: id, source: 'web', privacy: 'direct', privacyNote: '', search,
+  });
+  const Wrapper = ({ children }: { children: ReactNode }) => {
+    const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
+    return createElement(QueryClientProvider, { client }, children);
+  };
+
+  it('keeps distinct videos, ports and case-sensitive paths while merging tracking variants', () => {
+    const results = [
+      result('video-a', 'https://youtube.com/watch?v=A'),
+      result('video-b', 'https://youtube.com/watch?v=B'),
+      result('upper', 'https://example.com/Guide'),
+      result('lower', 'https://example.com/guide'),
+      result('port', 'https://example.com:8443/guide'),
+      result('tracked', 'https://example.com/guide?utm_source=x'),
+    ];
+    expect(deduplicateResults(results).map((r) => r.id)).toEqual(['video-a', 'video-b', 'upper', 'lower', 'port']);
+  });
+
+  it('fetches a new provider set for the same cached query', async () => {
+    const alpha = vi.fn(async () => ({ results: [result('alpha', 'https://alpha.example/', 'alpha')] }));
+    const beta = vi.fn(async () => ({ results: [result('beta', 'https://beta.example/', 'beta')] }));
+    searchState.providers = [provider('alpha', alpha), provider('beta', beta)];
+    searchState.disabledProviders = ['beta'];
+    const hook = renderHook(() => useProviderSearch({ query: 'nostr', source: 'all' }), { wrapper: Wrapper });
+    await waitFor(() => expect(hook.result.current.results.map((r) => r.id)).toEqual(['alpha']));
+    searchState.disabledProviders = ['alpha'];
+    hook.rerender();
+    await waitFor(() => expect(hook.result.current.results.map((r) => r.id)).toEqual(['beta']));
+    expect(alpha).toHaveBeenCalledTimes(1);
+    expect(beta).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores late provider status and results after the query is cancelled', async () => {
+    let finishOld: ((value: { results: SearchResult[] }) => void) | undefined;
+    searchState.providers = [provider('test', ({ query }) => query === 'first'
+      ? new Promise((resolve) => { finishOld = resolve; })
+      : Promise.resolve({ results: [result('current', 'https://current.example/')] }))];
+    const hook = renderHook(({ query }) => useProviderSearch({ query, source: 'all' }), {
+      initialProps: { query: 'first' }, wrapper: Wrapper,
+    });
+    await waitFor(() => expect(finishOld).toBeDefined());
+    hook.rerender({ query: 'second' });
+    await waitFor(() => expect(hook.result.current.providers[0].resultCount).toBe(1));
+    await act(async () => finishOld?.({ results: [
+      result('old-a', 'https://old.example/a'), result('old-b', 'https://old.example/b'),
+    ] }));
+    expect(hook.result.current.providers[0].resultCount).toBe(1);
+    expect(hook.result.current.results.map((r) => r.id)).toEqual(['current']);
   });
 });
 

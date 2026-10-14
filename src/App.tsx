@@ -13,7 +13,7 @@ import { NostrLoginProvider } from '@nostrify/react/login';
 import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
-import { DEFAULT_TAB_CONFIG } from '@/components/SourceTabs';
+import { DEFAULT_TAB_CONFIG } from '@/lib/sourceTabs';
 import { getBrowserLanguage } from '@/lib/languageFilter';
 import AppRouter from './AppRouter';
 
@@ -56,7 +56,7 @@ const defaultConfig: AppConfig = {
   //   wikipedia     — Wiki tab engine (tab hidden by default too)
   //   tor           — .onion search (Tor tab hidden by default)
   //   stackoverflow — Code tab engine (tab hidden by default too)
-  // The SIP-01 web index, SearXNG, DuckDuckGo, Nostr, stakes, and community
+  // The SIP-01 web index, SearXNG, DuckDuckGo, Nostr, and community
   // stay on. Users re-enable anything in Settings → Engines.
   disabledProviders: ['brave', 'parallel', 'cached-index', 'wikipedia', 'tor', 'stackoverflow'],
   // Language filter defaults to the browser's primary language (English
@@ -68,9 +68,9 @@ const defaultConfig: AppConfig = {
 export function App() {
   return (
     <UnheadProvider head={head}>
-      <AppProvider storageKey="nostr:app-config" defaultConfig={defaultConfig}>
-        <QueryClientProvider client={queryClient}>
-          <NostrLoginProvider storageKey='nostr:login'>
+      <QueryClientProvider client={queryClient}>
+        <NostrLoginProvider storageKey='nostr:login'>
+          <AppProvider storageKey="nostr:app-config" defaultConfig={defaultConfig}>
             <NostrProvider>
               <NostrSync />
               <TooltipProvider>
@@ -80,9 +80,9 @@ export function App() {
                 </Suspense>
               </TooltipProvider>
             </NostrProvider>
-          </NostrLoginProvider>
-        </QueryClientProvider>
-      </AppProvider>
+          </AppProvider>
+        </NostrLoginProvider>
+      </QueryClientProvider>
     </UnheadProvider>
   );
 }

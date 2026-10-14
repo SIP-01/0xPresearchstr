@@ -166,7 +166,9 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
       // Mobile signers deep-link back to this URL after approval. It MUST
       // be a real route (see RemoteLoginSuccess page) — otherwise the
       // redirect-back lands on the 404 page.
-      callback: isMobileDevice() ? `${window.location.origin}/remoteloginsuccess` : undefined,
+      callback: isMobileDevice()
+        ? new URL(`${import.meta.env.BASE_URL}remoteloginsuccess`, window.location.origin).href
+        : undefined,
     });
     setNostrConnectParams(params);
     setNostrConnectUri(uri);

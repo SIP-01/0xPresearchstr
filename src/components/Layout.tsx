@@ -49,19 +49,19 @@ export function Layout({ children, minimal = false }: LayoutProps) {
         minimal && 'border-transparent bg-transparent backdrop-blur-none',
       )}>
         <div className="container flex items-center justify-between h-14 gap-4">
-          <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
+          <Link to="/" className="flex min-w-0 items-center gap-2.5 group" aria-label="Presearchstr">
             <div className="relative flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 group-hover:border-primary/40 transition-colors">
               <Search className="w-4 h-4 text-primary" />
             </div>
-            <span className="font-semibold text-lg tracking-tight">
+            <span className="truncate font-semibold text-lg tracking-tight">
               <span className="text-primary">Pre</span>
               <span className="text-foreground">searchstr</span>
             </span>
           </Link>
 
-          <nav className="flex items-center gap-1">
+          <nav className="flex shrink-0 items-center gap-1">
             {!isHome && (
-              <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground">
+              <Button variant="ghost" size="sm" asChild className="hidden text-muted-foreground hover:text-foreground sm:inline-flex">
                 <Link to="/">
                   <Search className="w-4 h-4 mr-1.5" />
                   Search
@@ -79,7 +79,7 @@ export function Layout({ children, minimal = false }: LayoutProps) {
               <span className="hidden sm:inline">Submit</span>
             </Button>
 
-            <LoginArea className="max-w-48" />
+            <LoginArea className="max-w-24 sm:max-w-48" />
 
             {/* Hamburger — settings/about/explore/policy live here instead of
                 a row of header icons, so the bar stays slim on all screens. */}

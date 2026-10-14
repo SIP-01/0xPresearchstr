@@ -5,17 +5,29 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta http-equiv="content-security-policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self' https:; font-src 'self'; base-uri 'self'; manifest-src 'self'; connect-src 'self' blob: https: wss: ws://*.onion; img-src 'self' data: blob: https:; media-src 'self' https:">
         <meta name="theme-color" content="#2d8eff">
+        <meta property="og:type" content="website">
+        <meta property="og:title" content="Presearchstr">
+        <meta property="og:description" content="Community-driven search across Nostr and the web.">
         <meta name="description" content="Presearchstr — the community-driven, Nostr-native search engine. Presearch-style keyword staking, a federated search index shared with 0xSearchstr, and privacy-first results across Nostr, the clearnet, and dark web services.">
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-        <link rel="manifest" href="/manifest.webmanifest">
-        <link rel="search" type="application/opensearchdescription+xml" title="Presearchstr" href="/opensearch.xml">
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="%BASE_URL%favicon.svg"
+        >
+        <link rel="manifest" href="%BASE_URL%manifest.webmanifest">
+        <link
+            rel="search"
+            type="application/opensearchdescription+xml"
+            title="Presearchstr"
+            href="%BASE_URL%opensearch.xml"
+        >
         <title>Presearchstr</title>
     </head>
     <body>
         <div id="root">
             <!-- Boot placeholder: replaced the moment React mounts. If the JS
-                 bundle fails to load (e.g. a stale cached page referencing a
-                 deleted build), the user sees this instead of a white screen. -->
+                bundle fails to load (e.g. a stale cached page referencing a
+                deleted build), the user sees this instead of a white screen. -->
             <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:hsl(222 47% 6%);color:hsl(210 40% 96%);font-family:ui-sans-serif,system-ui,sans-serif;padding:24px;text-align:center;">
                 <div style="width:40px;height:40px;border-radius:12px;border:1px solid hsl(212 100% 59% / 0.4);background:hsl(212 100% 59% / 0.12);display:flex;align-items:center;justify-content:center;">
                     <span style="font-family:ui-monospace,monospace;font-weight:700;color:hsl(212 100% 68%);">P</span>

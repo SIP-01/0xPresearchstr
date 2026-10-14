@@ -2,9 +2,9 @@
  * Traffic-light privacy indicator — shows, at a glance, who can see
  * the current search before the user hits enter.
  *
- *   🟢 Nostr only — no third-party servers involved
+ *   🟢 Nostr only — search queries go to Nostr relays
  *   🟡 Mixed — direct APIs (Wikipedia, HN, Algolia…) see the query
- *   🔴 Proxied — a CORS proxy sees the query in plaintext
+ *   🔴 Proxied — a proxy or advertising backend sees the query
  *
  * Clicking opens a popover with an honest per-provider breakdown and
  * a shortcut to the Privacy Mode toggle in Settings.
@@ -22,6 +22,8 @@ import { cn } from '@/lib/utils';
 interface PrivacyIndicatorProps {
   /** The active source tab — determines which providers would run. */
   source: SearchSource | 'all';
+  /** Whether the submitted query and source permit keyword advertising. */
+  precommunityEligible?: boolean;
   className?: string;
 }
 
@@ -35,13 +37,13 @@ const TIER_META: Record<PrivacyTier, {
   description: string;
 }> = {
   nostr: {
-    label: 'Nostr only',
+    label: 'Nostr',
     short: 'Nostr',
     dot: 'bg-green-500',
     text: 'text-green-600 dark:text-green-500',
     border: 'border-green-500/30',
     icon: <ShieldCheck className="w-3.5 h-3.5" />,
-    description: 'Queries go to Nostr relays over WebSocket. Relay operators see the query + your IP, but no account is linked and nothing leaves for third-party servers.',
+    description: 'Queries go to Nostr relays over WebSocket. Relay operators see the query and your IP address.',
   },
   direct: {
     label: 'Mixed',
@@ -59,7 +61,7 @@ const TIER_META: Record<PrivacyTier, {
     text: 'text-red-600 dark:text-red-500',
     border: 'border-red-500/30',
     icon: <ShieldX className="w-3.5 h-3.5" />,
-    description: 'Some providers route through a CORS proxy to reach SearXNG, DuckDuckGo, or Ahmia. The proxy sees the full query in plaintext.',
+    description: 'Some services receive this search through a CORS proxy or deployment backend. That intermediary sees the query in plaintext.',
   },
 };
 
@@ -73,17 +75,21 @@ function worstTier(providers: SearchProvider[]): PrivacyTier {
   return worst;
 }
 
-export function PrivacyIndicator({ source, className }: PrivacyIndicatorProps) {
+export function PrivacyIndicator({ source, precommunityEligible = false, className }: PrivacyIndicatorProps) {
   const { config } = useAppContext();
   const privacyMode = config.privacyMode;
 
-  const active = getProvidersForPrivacy(source, privacyMode);
+  const active = getProvidersForPrivacy(source, privacyMode)
+    .filter((p) => !config.disabledProviders.includes(p.id));
   const suppressed = privacyMode
-    ? getProvidersForSource(source).filter((p) => !active.some((a) => a.id === p.id))
+    ? getProvidersForSource(source).filter((p) => !config.disabledProviders.includes(p.id) && !active.some((a) => a.id === p.id))
     : [];
+  const precommunityActive = precommunityEligible;
+  const adException = precommunityActive && privacyMode;
 
-  const tier = worstTier(active);
+  const tier = precommunityActive ? 'proxied' : worstTier(active);
   const meta = TIER_META[tier];
+  const label = adException ? 'Nostr' : meta.label;
 
   return (
     <Popover>
@@ -97,11 +103,11 @@ export function PrivacyIndicator({ source, className }: PrivacyIndicatorProps) {
             'hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             className,
           )}
-          aria-label={`Privacy status: ${meta.label}. Click for details.`}
+          aria-label={`Privacy status: ${label}. Click for details.`}
         >
           <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', meta.dot, 'animate-search-pulse')} />
           {meta.icon}
-          <span className="hidden sm:inline">{meta.label}</span>
+          <span className="hidden sm:inline">{label}</span>
         </button>
       </PopoverTrigger>
 
@@ -109,7 +115,7 @@ export function PrivacyIndicator({ source, className }: PrivacyIndicatorProps) {
         <div className="p-4 pb-3 border-b border-border/50">
           <div className="flex items-center gap-2 mb-1.5">
             <span className={cn('w-2 h-2 rounded-full', meta.dot)} />
-            <span className={cn('text-sm font-semibold', meta.text)}>{meta.label}</span>
+            <span className={cn('text-sm font-semibold', meta.text)}>{label}</span>
             {privacyMode && (
               <Badge variant="outline" className="text-[10px] border-green-500/30 text-green-600 dark:text-green-500">
                 Privacy Mode
@@ -117,7 +123,9 @@ export function PrivacyIndicator({ source, className }: PrivacyIndicatorProps) {
             )}
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            {meta.description}
+            {adException
+              ? 'Nostr handles organic search. AI is off; PRE community privacy ads remain enabled.'
+              : meta.description}
           </p>
         </div>
 
@@ -126,6 +134,18 @@ export function PrivacyIndicator({ source, className }: PrivacyIndicatorProps) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-1.5">
             Who sees this search
           </p>
+          {precommunityActive && (
+            <div className="flex items-start gap-2 px-1 py-1">
+              <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-red-500" />
+              <div className="min-w-0">
+                <span className="text-xs font-medium text-foreground">PRE community privacy ads</span>
+                <p className="text-[11px] text-muted-foreground/80 leading-snug">
+                  PRE community, the community around the PRE token, resolves blockchain keyword ads from your query through our backend.
+                  No Nostr account or browser cookies are sent. Clicks are counted.
+                </p>
+              </div>
+            </div>
+          )}
           {active.map((p) => (
             <div key={p.id} className="flex items-start gap-2 px-1 py-1">
               <span className={cn('w-1.5 h-1.5 rounded-full mt-1.5 shrink-0', TIER_META[p.privacy].dot)} />

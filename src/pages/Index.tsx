@@ -7,10 +7,9 @@ import { Layout } from '@/components/Layout';
 import { SearchBar } from '@/components/SearchBar';
 import { SourceTabs, type SourceTabValue } from '@/components/SourceTabs';
 import { UnifiedResultCard } from '@/components/UnifiedResultCard';
-import { StakeResultCard } from '@/components/StakeResultCard';
+import { PrecommunityAdCard, PrecommunityAdInvite } from '@/components/PrecommunityAdCard';
 import { VoteTalliesProvider } from '@/components/VoteButtons';
 import { AIAnswerCard } from '@/components/AIAnswerCard';
-import { StakeKeywordDialog } from '@/components/StakeKeywordDialog';
 import { ProviderStatus } from '@/components/ProviderStatus';
 import { BrowserFallback } from '@/components/BrowserFallback';
 import { SearchSkeleton } from '@/components/SearchSkeleton';
@@ -24,7 +23,9 @@ import { useInstantAnswer } from '@/hooks/useInstantAnswer';
 import { useAIAnswer } from '@/hooks/useAIAnswer';
 import { useSearchHotkeys } from '@/hooks/useSearchHotkeys';
 import { useAppContext } from '@/hooks/useAppContext';
-import { ALL_SOURCE_TABS } from '@/components/SourceTabs';
+import { usePrecommunityAd, isPrecommunityQueryEligible } from '@/hooks/usePrecommunityAd';
+import { ALL_SOURCE_TABS } from '@/lib/sourceTabs';
+import { PRECOMMUNITY_MARKET_URL } from '@/lib/precommunity';
 import type { SearchSource } from '@/lib/providers/types';
 
 const KNOWN_TAB_IDS = new Set(ALL_SOURCE_TABS.map((t) => t.id as string));
@@ -41,13 +42,14 @@ const Index = () => {
   // URL param wins; otherwise the user's configured default tab (Web out of
   // the box). Unknown/garbage stored values fall back to 'web'.
   const storedDefault = config.tabConfig.defaultTab;
-  const initialSource = (searchParams.get('source') as SourceTabValue)
-    || (KNOWN_TAB_IDS.has(storedDefault) ? (storedDefault as SourceTabValue) : 'web');
+  const requestedSource = searchParams.get('source') ?? '';
+  const initialSource: SourceTabValue = KNOWN_TAB_IDS.has(requestedSource)
+    ? requestedSource as SourceTabValue
+    : KNOWN_TAB_IDS.has(storedDefault) ? storedDefault as SourceTabValue : 'web';
 
   const [query, setQuery] = useState(initialQuery);
   const [activeQuery, setActiveQuery] = useState(initialQuery);
   const [source, setSource] = useState<SourceTabValue>(initialSource);
-  const [stakeOpen, setStakeOpen] = useState(false);
 
   const hasSearched = activeQuery.length > 0;
 
@@ -59,17 +61,19 @@ const Index = () => {
   // view; browser back/forward revisits earlier searches. Typing never
   // touches the URL — only submission sets it — so this can't fight input.
   const paramQuery = searchParams.get('q') || '';
-  useEffect(() => {
-    if (paramQuery === activeQuery) return;
-    setQuery(paramQuery);
-    setActiveQuery(paramQuery);
-    if (!paramQuery) {
-      // Bare home: also reset the tab to the configured default and start
-      // at the top — a fresh visit state, not a scrolled-down results page.
-      setSource(KNOWN_TAB_IDS.has(storedDefault) ? (storedDefault as SourceTabValue) : 'web');
-      window.scrollTo(0, 0);
+  const urlKey = searchParams.toString();
+  const [previousUrl, setPreviousUrl] = useState(urlKey);
+  if (urlKey !== previousUrl) {
+    setPreviousUrl(urlKey);
+    if (paramQuery !== (new URLSearchParams(previousUrl).get('q') ?? '')) {
+      setQuery(paramQuery);
     }
-  }, [paramQuery, activeQuery, storedDefault]);
+    setActiveQuery(paramQuery);
+    setSource(initialSource);
+  }
+  useEffect(() => {
+    if (!paramQuery) window.scrollTo(0, 0);
+  }, [paramQuery]);
 
   // Map SourceTabValue to provider search source.
   // 'i2p' has no provider — it shows directory links only.
@@ -88,7 +92,7 @@ const Index = () => {
     suppressedProviders,
   } = useProviderSearch({
     query: activeQuery,
-    source: providerSource as SearchSource | 'all' | 'index',
+    source: providerSource,
     enabled: hasSearched && source !== 'i2p',
   });
 
@@ -108,25 +112,23 @@ const Index = () => {
     return results.filter((r) => r.source === source);
   }, [results, source]);
 
-  // Keyword stakes get their own top-of-page placement (Presearch-style).
-  const stakeResults = useMemo(
-    () => filteredResults.filter((r) => r.provider === 'keyword-stake'),
-    [filteredResults],
-  );
-  const organicResults = useMemo(
-    () => filteredResults.filter((r) => r.provider !== 'keyword-stake'),
-    [filteredResults],
-  );
+  const organicResults = filteredResults;
+  const adQueryEligible = (source === 'web' || source === 'all') && isPrecommunityQueryEligible(activeQuery);
+  const adsEnabled = hasSearched && adQueryEligible;
+  const adQuery = usePrecommunityAd(activeQuery, adsEnabled);
 
   const totalResults = organicResults.length;
 
   // Pagination — reset to page 1 on a new query or tab, scroll back to the
   // top of the results on every page change.
   const [page, setPage] = useState(1);
+  const pageKey = JSON.stringify([activeQuery, source]);
+  const [previousPageKey, setPreviousPageKey] = useState(pageKey);
   const resultsTopRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  if (pageKey !== previousPageKey) {
+    setPreviousPageKey(pageKey);
     setPage(1);
-  }, [activeQuery, source]);
+  }
 
   const pageCount = Math.max(1, Math.ceil(totalResults / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -152,7 +154,7 @@ const Index = () => {
 
   useSeoMeta({
     title: hasSearched ? `${activeQuery} - Presearchstr` : 'Presearchstr - Decentralized Search Aggregator',
-    description: 'Search Nostr first, enriched with privacy-respecting web results. No backend, no crawler, no tracking.',
+    description: 'Search Nostr and the web, enriched by a shared community index and sponsored keyword ads from Precommunity.',
   });
 
   const handleSubmit = useCallback((value: string) => {
@@ -219,7 +221,10 @@ const Index = () => {
 
           {/* Privacy traffic-light — honest signal about who sees the query */}
           <div className="mt-6 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:delay-500">
-            <PrivacyIndicator source={providerSource as SearchSource | 'all'} />
+            <PrivacyIndicator
+              source={providerSource as SearchSource | 'all'}
+              precommunityEligible={(source === 'web' || source === 'all') && isPrecommunityQueryEligible(query)}
+            />
           </div>
 
           {/* Trending cached queries — the community index as content */}
@@ -235,7 +240,7 @@ const Index = () => {
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground/70 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:delay-1000">
             <span className="inline-flex items-center gap-1.5">
               <Gem className="w-3 h-3 text-primary/70" />
-              Keyword staking with your Nostr key
+              Keyword advertising with Precommunity
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Search className="w-3 h-3 text-primary/70" />
@@ -270,15 +275,15 @@ const Index = () => {
         <div className="flex flex-col gap-3 mb-6">
           <div className="flex items-center gap-2 flex-wrap">
             <SourceTabs value={source} onChange={handleSourceChange} counts={hasSearched ? counts : undefined} />
-            <PrivacyIndicator source={providerSource as SearchSource | 'all'} className="ml-auto" />
+            <PrivacyIndicator source={providerSource as SearchSource | 'all'} precommunityEligible={adQueryEligible} className="ml-auto" />
           </div>
           {providers.length > 0 && source !== 'i2p' && (
             <ProviderStatus providers={providers} hasResults={totalResults > 0} />
           )}
-          {privacyMode && suppressedProviders.length > 0 && source !== 'i2p' && (
-            <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-              Privacy Mode — {suppressedProviders.length} external provider{suppressedProviders.length !== 1 ? 's' : ''} blocked. This search never left the Nostr network.
+          {privacyMode && (suppressedProviders.length > 0 || adsEnabled) && source !== 'i2p' && (
+            <p className="text-xs text-muted-foreground max-w-2xl">
+              Privacy Mode — Nostr organic search; AI off.
+              {adsEnabled && ' PRE community privacy ads use only your query.'}
             </p>
           )}
         </div>
@@ -305,18 +310,15 @@ const Index = () => {
             />
           )}
 
-          {/* Community keyword stakes — Presearch-style top placement */}
-          {source !== 'i2p' && stakeResults.length > 0 && (
-            <div className="space-y-3 mb-4">
-              {stakeResults.map((result) => (
-                <StakeResultCard key={result.id} result={result} />
-              ))}
-            </div>
+          {adsEnabled && !adQuery.isPending && (
+            adQuery.data?.ad
+              ? <PrecommunityAdCard ad={adQuery.data.ad} className="mb-4" />
+              : <PrecommunityAdInvite keyword={activeQuery} className="mb-4" />
           )}
 
           {/* Vote tallies load once per visible result set (batched) and
               flow to every card's vote buttons via context. */}
-          <VoteTalliesProvider results={[...stakeResults, ...organicResults]}>
+          <VoteTalliesProvider results={organicResults}>
 
           {/* Loading state */}
           {source !== 'i2p' && isLoading && totalResults === 0 ? (
@@ -337,13 +339,15 @@ const Index = () => {
                         handleSubmit(q);
                       }}
                     />
-                    <button
-                      onClick={() => setStakeOpen(true)}
-                      className="inline-flex items-center gap-1.5 mt-5 text-xs text-primary/80 hover:text-primary transition-colors"
+                    <a
+                      href={PRECOMMUNITY_MARKET_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 mt-5 rounded-md text-xs text-primary/80 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Gem className="w-3 h-3" />
-                      Be the first to stake this keyword
-                    </button>
+                      Advertise with Precommunity
+                    </a>
                   </CardContent>
                 </Card>
               )}
@@ -351,7 +355,7 @@ const Index = () => {
             </>
           ) : source !== 'i2p' && (
             <div className="space-y-3">
-              {/* Result count header + stake CTA */}
+              {/* Result count header + advertiser CTA */}
               {totalResults > 0 && (
                 <div ref={resultsTopRef} className="flex items-center justify-between gap-3 mb-1 scroll-mt-24">
                   <p className="text-sm text-muted-foreground">
@@ -363,14 +367,15 @@ const Index = () => {
                       <span className="ml-2 text-primary animate-search-pulse">more loading...</span>
                     )}
                   </p>
-                  <button
-                    onClick={() => setStakeOpen(true)}
-                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/70 hover:text-primary transition-colors shrink-0"
-                    title="Stake this keyword — your link takes the top spot for this search"
+                  <a
+                    href={PRECOMMUNITY_MARKET_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-md text-xs text-muted-foreground/70 hover:text-primary transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Gem className="w-3 h-3" />
-                    Stake this keyword
-                  </button>
+                    Advertise with Precommunity
+                  </a>
                 </div>
               )}
 
@@ -387,18 +392,6 @@ const Index = () => {
                   onChange={goToPage}
                   loading={providers.some((p) => p.status === 'searching')}
                 />
-              )}
-
-              {/* Stakes-only view: no organic results yet, but a stake matched */}
-              {organicResults.length === 0 && stakeResults.length > 0 && !isLoading && (
-                <Card className="border-dashed">
-                  <CardContent className="py-8 px-8 text-center">
-                    <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                      No organic results for &ldquo;{activeQuery}&rdquo; yet — just the community
-                      stake above.
-                    </p>
-                  </CardContent>
-                </Card>
               )}
 
               {/* Suggestions */}
@@ -420,8 +413,8 @@ const Index = () => {
                 </div>
               )}
 
-              {/* Browser fallback when sparse (or stakes-only) */}
-              {((totalResults > 0 && totalResults < 5) || (totalResults === 0 && stakeResults.length > 0 && !isLoading)) && source !== 'tor' && (
+              {/* Browser fallback when sparse */}
+              {totalResults > 0 && totalResults < 5 && source !== 'tor' && (
                 <BrowserFallback query={activeQuery} className="mt-4" />
               )}
             </div>
@@ -429,13 +422,6 @@ const Index = () => {
           </VoteTalliesProvider>
         </div>
       </div>
-
-      {/* Keyword staking dialog (prefilled with the active query) */}
-      <StakeKeywordDialog
-        open={stakeOpen}
-        onOpenChange={setStakeOpen}
-        initialKeyword={activeQuery}
-      />
     </Layout>
   );
 };
