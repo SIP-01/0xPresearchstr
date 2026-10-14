@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect } from 'react';
 import { z } from 'zod';
 import { useNostrLogin } from '@nostrify/react/login';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AppContext, type AccountConfig, type AppConfig, type AppContextType, type Theme, type RelayMetadata, type BlossomServerMetadata } from '@/contexts/AppContext';
 import { getBraveApiKey } from '@/lib/providers/brave';
 import { getParallelApiKey } from '@/lib/providers/parallel';
@@ -97,7 +98,7 @@ export function AppProvider(props: AppProviderProps) {
   const accountPubkey = logins[0]?.pubkey;
 
   // App configuration state with localStorage persistence
-  const [rawConfig, setConfig] = useLocalStorage<StoredConfig>(
+  const [rawConfig, setConfig, hasStorageError] = useLocalStorage<StoredConfig>(
     storageKey,
     {},
     {
@@ -190,6 +191,14 @@ export function AppProvider(props: AppProviderProps) {
   return (
     <AppContext.Provider value={appContextValue}>
       {children}
+      {hasStorageError && (
+        <Alert variant="destructive" className="fixed inset-x-4 bottom-4 z-50 w-auto shadow-sm sm:left-auto sm:w-96">
+          <AlertTitle className="text-lg">Settings could not be saved</AlertTitle>
+          <AlertDescription className="text-lg">
+            Changes apply for this session only. Reloading may restore your previous settings.
+          </AlertDescription>
+        </Alert>
+      )}
     </AppContext.Provider>
   );
 }

@@ -325,7 +325,7 @@ function PrivacySection() {
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               {privacyMode
                 ? 'Active. Nostr organic results; AI disabled. PRE community privacy ads still resolve eligible Web/All queries through the backend.'
-                : 'Nostr-only organic results with clearnet APIs, proxies, and AI disabled. PRE community privacy ads remain active for eligible Web/All queries.'}
+                : 'Off. Enable for Nostr-only organic results with clearnet APIs, proxies, and AI disabled. PRE community privacy ads remain active for eligible Web/All queries.'}
             </p>
           </div>
         </CardContent>

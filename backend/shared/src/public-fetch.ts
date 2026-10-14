@@ -88,15 +88,26 @@ async function readLimitedText(response: IncomingMessage, maxBytes: number): Pro
 /** Every request and redirect uses a checked, pinned address; limits cover decoded bytes. */
 export async function fetchPublicText(
   value: string,
-  options: { headers: Record<string, string>; maxBytes: number; timeoutMs: number },
+  options: {
+    headers: Record<string, string>;
+    maxBytes: number;
+    timeoutMs: number;
+    beforeRequest?: (url: URL) => Promise<void>;
+  },
 ): Promise<{ ok: boolean; headers: Headers; text: string; url: string }> {
-  const signal = AbortSignal.timeout(options.timeoutMs);
+  let remainingMs = options.timeoutMs;
   let url = new URL(value);
   for (let redirects = 0; redirects <= 5; redirects++) {
+    if (remainingMs <= 0) throw new DOMException('Crawler request timed out', 'TimeoutError');
+    await options.beforeRequest?.(url);
+    // Polite crawler waits do not consume the network budget shared by all hops.
+    const signal = AbortSignal.timeout(Math.ceil(remainingMs));
+    const startedAt = performance.now();
     const response = await requestPublic(url, options.headers, signal);
     const status = response.statusCode ?? 500;
     if ([301, 302, 303, 307, 308].includes(status) && response.headers.location) {
       response.destroy();
+      remainingMs -= performance.now() - startedAt;
       url = new URL(response.headers.location, url);
       continue;
     }

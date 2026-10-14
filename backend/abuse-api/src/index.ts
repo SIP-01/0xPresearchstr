@@ -289,6 +289,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
     sendJson(res, 404, { error: 'Not found' });
   } catch (err) {
+    if (err instanceof Error && err.message === 'Body too large') {
+      sendJson(res, 413, { error: 'Body too large' });
+      return;
+    }
     log.error({ err }, 'Request handler error');
     sendJson(res, 500, { error: 'Internal server error' });
   }

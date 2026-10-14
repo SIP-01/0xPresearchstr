@@ -12,6 +12,7 @@
 
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import * as cheerio from 'cheerio';
 import robotsParserModule from 'robots-parser';
 import PQueue from 'p-queue';
@@ -37,8 +38,10 @@ const SEED_FILE_PATH = process.env.CLEARNET_SEED_FILE || './config/seeds-clearne
 // ─── State ───
 const visited = new Set<string>();
 const queue = new PQueue({ concurrency: MAX_CONCURRENT });
+const domainRateQueues = new Map<string, PQueue>();
 const domainLastFetch = new Map<string, number>();
 const domainPageCount = new Map<string, number>();
+const domainPendingCount = new Map<string, number>();
 const robotsCache = new Map<string, ReturnType<typeof robotsParser>>();
 let batch: SearchDocument[] = [];
 
@@ -104,28 +107,31 @@ async function isAllowed(url: string): Promise<boolean> {
 
 // ─── Rate limiting ───
 async function waitForRateLimit(domain: string): Promise<void> {
-  const lastFetch = domainLastFetch.get(domain) || 0;
-  const elapsed = Date.now() - lastFetch;
-  if (elapsed < RATE_LIMIT_MS) {
-    await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_MS - elapsed));
+  let rateQueue = domainRateQueues.get(domain);
+  if (!rateQueue) {
+    rateQueue = new PQueue({ concurrency: 1 });
+    domainRateQueues.set(domain, rateQueue);
   }
-  domainLastFetch.set(domain, Date.now());
+  await rateQueue.add(async () => {
+    const elapsed = Date.now() - (domainLastFetch.get(domain) || 0);
+    if (elapsed < RATE_LIMIT_MS) {
+      await delay(RATE_LIMIT_MS - elapsed);
+    }
+    domainLastFetch.set(domain, Date.now());
+  });
 }
 
 // ─── Page fetching and parsing ───
 async function fetchPage(url: string): Promise<{ html: string; url: string } | null> {
-  try {
-    const domain = new URL(url).hostname;
-
-    // Check page-per-domain limit.
-    const count = domainPageCount.get(domain) || 0;
-    if (count >= MAX_PAGES_PER_DOMAIN) {
-      log.debug({ domain }, 'Max pages reached for domain');
-      return null;
+  let reservedDomain: string | undefined;
+  let skipped = false;
+  const releaseSlot = () => {
+    if (reservedDomain !== undefined) {
+      domainPendingCount.set(reservedDomain, (domainPendingCount.get(reservedDomain) || 0) - 1);
+      reservedDomain = undefined;
     }
-
-    await waitForRateLimit(domain);
-
+  };
+  try {
     const res = await fetchPublicText(url, {
       headers: {
         'User-Agent': USER_AGENT,
@@ -134,6 +140,24 @@ async function fetchPage(url: string): Promise<{ html: string; url: string } | n
       },
       timeoutMs: 15000,
       maxBytes: MAX_CONTENT_LENGTH,
+      beforeRequest: async (destination) => {
+        const domain = destination.hostname;
+        if (domain !== reservedDomain) releaseSlot();
+        if (!(await isAllowed(destination.href))) {
+          skipped = true;
+          throw new Error('Disallowed by robots.txt');
+        }
+        if (reservedDomain === undefined) {
+          const count = (domainPageCount.get(domain) || 0) + (domainPendingCount.get(domain) || 0);
+          if (count >= MAX_PAGES_PER_DOMAIN) {
+            skipped = true;
+            throw new Error(`Max pages reached for domain: ${domain}`);
+          }
+          domainPendingCount.set(domain, (domainPendingCount.get(domain) || 0) + 1);
+          reservedDomain = domain;
+        }
+        await waitForRateLimit(domain);
+      },
     });
 
     if (!res.ok) return null;
@@ -141,13 +165,16 @@ async function fetchPage(url: string): Promise<{ html: string; url: string } | n
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('text/html')) return null;
 
-    domainPageCount.set(domain, count + 1);
+    const domain = new URL(res.url).hostname;
+    domainPageCount.set(domain, (domainPageCount.get(domain) || 0) + 1);
 
     return { html: res.text, url: res.url };
   } catch (err) {
-    status.errors++;
+    if (!skipped) status.errors++;
     log.debug({ err, url }, 'Failed to fetch page');
     return null;
+  } finally {
+    releaseSlot();
   }
 }
 
@@ -243,12 +270,6 @@ async function flushBatch(): Promise<void> {
 async function processUrl(url: string): Promise<void> {
   if (visited.has(url)) return;
   visited.add(url);
-
-  // Check robots.txt.
-  if (!(await isAllowed(url))) {
-    log.debug({ url }, 'Disallowed by robots.txt');
-    return;
-  }
 
   const page = await fetchPage(url);
   if (!page) return;

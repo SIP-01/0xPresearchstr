@@ -25,16 +25,20 @@ export function useLocalStorage<T>(
   });
 
   const stateRef = useRef(state);
+  const [hasStorageError, setHasStorageError] = useState(false);
 
   const setValue = useCallback((value: T | ((prev: T) => T)) => {
     const valueToStore = value instanceof Function ? value(stateRef.current) : value;
-    stateRef.current = valueToStore;
-    setState(valueToStore);
     try {
       localStorage.setItem(key, serialize(valueToStore));
+      setHasStorageError(false);
     } catch (error) {
       console.warn(`Failed to save ${key} to localStorage:`, error);
+      setHasStorageError(true);
     }
+    // Keep settings and account synchronization usable when persistence is unavailable.
+    stateRef.current = valueToStore;
+    setState(valueToStore);
   }, [key, serialize]);
 
   // Sync with localStorage changes from other tabs
@@ -45,6 +49,7 @@ export function useLocalStorage<T>(
           const next = deserialize(e.newValue);
           stateRef.current = next;
           setState(next);
+          setHasStorageError(false);
         } catch (error) {
           console.warn(`Failed to sync ${key} from localStorage:`, error);
         }
@@ -55,5 +60,5 @@ export function useLocalStorage<T>(
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [key, deserialize]);
 
-  return [state, setValue] as const;
+  return [state, setValue, hasStorageError] as const;
 }
