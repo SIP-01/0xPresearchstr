@@ -1,8 +1,8 @@
 /**
- * Presearchstr AI proxy — Cloudflare Worker.
+ * Presearchstr API proxy — Cloudflare Worker.
  *
- * ONE job: let the engine operator offer AI answers to all users without
- * the API key ever touching a browser, the repo, or a public response.
+ * Lets the operator offer AI, search, and keyword ads without private API
+ * keys ever touching a browser, the repo, or a public response.
  *
  * Routes (same origin as the static app):
  *   GET  /api/ai/status            → public config status (masked, no secrets)
@@ -12,11 +12,13 @@
  *   GET  /api/search/status        → which engine search providers are configured
  *   GET  /api/search/brave         → Brave Search proxy, key injected here
  *   POST /api/search/parallel      → Parallel Search proxy, key injected here
+ *   GET  /api/ads/precommunity     → keyword ad proxy, key injected here
  *
  * Operator configuration (nothing secret in the repo):
  *   wrangler secret put AI_API_KEY            ← the actual key (env-only mode)
  *   wrangler secret put BRAVE_API_KEY         ← engine-provided Brave Search
  *   wrangler secret put PARALLEL_API_KEY      ← engine-provided Parallel Search
+ *   wrangler secret put KEYWORD_MARKET_API_KEY ← Precommunity keyword ads
  *   AI_PROVIDER_ENDPOINT / AI_MODEL / AI_PROVIDER_NAME / AI_ENGINE_ENABLED (vars)
  *   OWNER_PUBKEY (var, hex)                   ← enables the Admin → AI tab
  *   AI_CONFIG_KV (KV binding, optional)       ← enables admin-UI-managed config
@@ -43,6 +45,7 @@ import {
   applyAdminAction,
   type EngineAIEnv,
 } from './src/lib/ai/engineProxy';
+import { parsePrecommunityResponse, PRECOMMUNITY_RESOLVE_URL } from './src/lib/precommunity';
 
 interface Env extends EngineAIEnv {
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
@@ -50,6 +53,8 @@ interface Env extends EngineAIEnv {
   BRAVE_API_KEY?: string;
   /** Engine-provided Parallel Search key (wrangler secret) — server-side only. */
   PARALLEL_API_KEY?: string;
+  /** Precommunity keyword-market key (wrangler secret) — server-side only. */
+  KEYWORD_MARKET_API_KEY?: string;
 }
 
 /**
@@ -293,6 +298,47 @@ async function proxyParallel(request: Request, env: Env): Promise<Response> {
   return json(await res.json(), 200, request);
 }
 
+/** Resolve one keyword ad without exposing the operator's key or upstream errors. */
+async function proxyPrecommunity(request: Request, env: Env): Promise<Response> {
+  const q = (new URL(request.url).searchParams.get('q') ?? '').trim();
+  if (!q || q.length > 400 || /^nsec1/i.test(q)) {
+    return json({ error: { message: 'q must contain 1–400 characters', type: 'invalid_request' } }, 400, request);
+  }
+  const apiKey = env.KEYWORD_MARKET_API_KEY?.trim();
+  if (!apiKey) {
+    return json({ error: { message: 'Keyword ads are not configured', type: 'unavailable' } }, 503, request);
+  }
+  const ip = `${request.headers.get('CF-Connecting-IP') ?? 'anonymous'}:ads`;
+  if (rateLimited(ip)) {
+    return json({ error: { message: 'Rate limit exceeded — slow down', type: 'rate_limited' } }, 429, request);
+  }
+
+  const upstream = new URL(PRECOMMUNITY_RESOLVE_URL);
+  upstream.searchParams.set('q', q);
+  const res = await fetch(upstream, {
+    headers: { Accept: 'application/json', 'X-API-Key': apiKey },
+    redirect: 'manual', // workerd supports manual/follow; never forward the key on redirects.
+    signal: AbortSignal.any([request.signal, AbortSignal.timeout(5_000)]),
+  }).catch(() => null);
+
+  if (!res || !res.ok) {
+    await res?.body?.cancel().catch(() => undefined);
+    return json({ error: { message: 'Keyword ads are unavailable', type: 'upstream_unavailable' } }, res?.status === 429 ? 429 : 502, request);
+  }
+
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    return json({ error: { message: 'Invalid keyword ad response', type: 'provider_error' } }, 502, request);
+  }
+  const data = parsePrecommunityResponse(body);
+  if (!data || JSON.stringify(data).includes(apiKey)) {
+    return json({ error: { message: 'Invalid keyword ad response', type: 'provider_error' } }, 502, request);
+  }
+  return json(data, 200, request);
+}
+
 /** Owner-authenticated config write (NIP-98-style signed event, KV-backed). */
 async function handleAdmin(request: Request, env: Env): Promise<Response> {
   const auth = await verifyAdminAuth(request.headers.get('Authorization'), request.url, env);
@@ -328,7 +374,7 @@ async function handleAdmin(request: Request, env: Env): Promise<Response> {
   }
 
   await writeEngineConfig(env.AI_CONFIG_KV, next);
-  return json({ ok: true, status: buildPublicStatus(next) });
+  return json({ ok: true, status: buildPublicStatus(next) }, 200, request);
 }
 
 export default {
@@ -336,6 +382,18 @@ export default {
     const url = new URL(request.url);
 
     try {
+      if (url.pathname === '/api/ads/precommunity') {
+        const origin = request.headers.get('Origin');
+        if (origin && origin !== url.origin && !corsOrigin(request)) {
+          return json({ error: { message: 'Origin is not allowed', type: 'forbidden' } }, 403, request);
+        }
+        if (request.method !== 'GET' && request.method !== 'OPTIONS') {
+          const response = json({ error: { message: 'Method not allowed', type: 'invalid_request' } }, 405, request);
+          response.headers.set('Allow', 'GET, OPTIONS');
+          return response;
+        }
+        if (request.method === 'GET') return proxyPrecommunity(request, env);
+      }
       if (url.pathname.startsWith('/api/') && request.method === 'OPTIONS') {
         return handleOptions(request);
       }

@@ -5,6 +5,7 @@ import { NostrLoginProvider } from '@nostrify/react/login';
 import NostrProvider from '@/components/NostrProvider';
 import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
+import { DEFAULT_TAB_CONFIG } from '@/lib/sourceTabs';
 
 interface TestAppProps {
   children: React.ReactNode;
@@ -33,21 +34,27 @@ export function TestApp({ children }: TestAppProps) {
       updatedAt: 0,
     },
     useAppBlossomServers: true,
+    privacyMode: false,
+    autoIndex: false,
+    tabConfig: DEFAULT_TAB_CONFIG,
+    voteWithIdentity: false,
+    disabledProviders: [],
+    languageFilter: [],
   };
 
   return (
     <UnheadProvider head={head}>
-      <AppProvider storageKey='test-app-config' defaultConfig={defaultConfig}>
-        <QueryClientProvider client={queryClient}>
-          <NostrLoginProvider storageKey='test-login'>
+      <QueryClientProvider client={queryClient}>
+        <NostrLoginProvider storageKey='test-login'>
+          <AppProvider storageKey='test-app-config' defaultConfig={defaultConfig}>
             <NostrProvider>
               <BrowserRouter>
                 {children}
               </BrowserRouter>
             </NostrProvider>
-          </NostrLoginProvider>
-        </QueryClientProvider>
-      </AppProvider>
+          </AppProvider>
+        </NostrLoginProvider>
+      </QueryClientProvider>
     </UnheadProvider>
   );
 }

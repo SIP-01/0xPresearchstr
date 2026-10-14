@@ -93,7 +93,9 @@ export async function indexDocuments(docs: SearchDocument[]): Promise<void> {
 export async function removeDocuments(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const index = await getSearchIndex();
-  await index.deleteDocuments(ids);
+  const task = await index.deleteDocuments(ids);
+  const completed = await index.waitForTask(task.taskUid, { timeOutMs: 30_000 });
+  if (completed.status !== 'succeeded') throw new Error('Index deletion did not succeed');
 }
 
 /** Search the index with filters. */

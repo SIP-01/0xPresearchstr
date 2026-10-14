@@ -108,7 +108,6 @@ export function useVoteActions() {
           created_at: Math.floor(Date.now() / 1000),
           tags: template.tags,
           content: template.content,
-          pubkey: identity.pubkeyHex,
         },
         hexToBytes(identity.secretHex),
       );

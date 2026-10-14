@@ -17,6 +17,8 @@ export interface BlossomServerMetadata {
   updatedAt: number;
 }
 
+export type AccountConfig = Pick<AppConfig, 'relayMetadata' | 'blossomServerMetadata' | 'useAppBlossomServers'>;
+
 export interface AppConfig {
   /** Current theme */
   theme: Theme;
@@ -31,9 +33,9 @@ export interface AppConfig {
    */
   useAppBlossomServers: boolean;
   /**
-   * Privacy Mode — when true, only Nostr-tier providers run (cached index +
-   * NIP-50 relay search). No queries leave for clearnet APIs, CORS proxies,
-   * or third-party servers.
+   * Privacy Mode — organic search uses Nostr-tier providers and AI stays off.
+   * PRE community advertising is an exception: eligible Web/All text queries
+   * still go through the backend to PRE community.
    */
   privacyMode: boolean;
   /**
@@ -81,6 +83,10 @@ export interface AppContextType {
   config: AppConfig;
   /** Update configuration using a callback that receives current config and returns new config */
   updateConfig: (updater: (currentConfig: Partial<AppConfig>) => Partial<AppConfig>) => void;
+  /** Account whose destinations are currently exposed in config. */
+  accountPubkey: string | undefined;
+  /** Store an asynchronous sync result for the account that requested it. */
+  updateAccountConfig: (pubkey: string, updater: (current: Partial<AccountConfig>) => Partial<AccountConfig>) => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);

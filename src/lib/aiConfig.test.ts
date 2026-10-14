@@ -7,7 +7,13 @@
  * client-side resolved config (the built-in tier's shared key is public
  * and rate-limited BY DESIGN — a different, disclosed tradeoff).
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { TestApp } from '@/test/TestApp';
+import { useAIAnswer, buildEvidence } from '@/hooks/useAIAnswer';
+import { useAppContext } from '@/hooks/useAppContext';
+import { ENGINE_PROXY_PROVIDER } from '@/lib/ai/registry';
+import type { SearchResult } from '@/lib/providers/types';
 
 import {
   resolveAIConfig,
@@ -107,5 +113,89 @@ describe('secrecy invariants', () => {
     expect(engineAIAvailable({ configured: true, enabled: false })).toBe(false);
     expect(engineAIAvailable(null)).toBe(false);
     expect(engineAIAvailable(undefined)).toBe(false);
+  });
+});
+
+describe('AI privacy and engine transport', () => {
+  const results: SearchResult[] = [
+    { id: 'a', title: 'First source', snippet: '', url: 'https://example.com/a', source: 'web', provider: 'duckduckgo' },
+    { id: 'b', title: 'Second source', snippet: '', url: 'https://example.com/b', source: 'web', provider: 'duckduckgo' },
+  ];
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    localStorage.removeItem('presearchstr:ai-config');
+    localStorage.removeItem('test-app-config');
+    localStorage.removeItem('test-login');
+  });
+
+  it('sends engine completions directly to the engine without a third-party proxy', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: 'An answer' } }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await ENGINE_PROXY_PROVIDER.answer('https://engine.example/api/ai', '', {
+      query: 'private question', evidence: [], model: 'test-model',
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://engine.example/api/ai/chat/completions');
+    expect(init?.headers).not.toHaveProperty('Authorization');
+  });
+
+  it('does not send AI or engine status requests when Privacy Mode starts enabled', async () => {
+    localStorage.setItem('presearchstr:ai-config', JSON.stringify({ ...DEFAULT_AI_CONFIG, enabled: true }));
+    localStorage.setItem('test-app-config', JSON.stringify({ privacyMode: true }));
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useAIAnswer('private question', results, true), { wrapper: TestApp });
+    await waitFor(() => expect(result.current).not.toBeNull());
+    expect(result.current.active).toBe(false);
+    expect(result.current.answer).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('aborts an active completion when Privacy Mode is enabled', async () => {
+    localStorage.setItem('presearchstr:ai-config', JSON.stringify({
+      ...DEFAULT_AI_CONFIG, enabled: true, providerId: 'custom', endpoint: 'https://ai.example/v1', model: 'test-model',
+    }));
+    localStorage.setItem('test-app-config', JSON.stringify({ privacyMode: false, disabledProviders: [] }));
+    let chatSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn<typeof fetch>(async (_url, init) => {
+      if (init?.method === 'POST') {
+        chatSignal = init.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          chatSignal?.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true });
+        });
+      }
+      return new Response(JSON.stringify({ configured: false, enabled: false }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => ({
+      ai: useAIAnswer('private question', results, true),
+      updateConfig: useAppContext().updateConfig,
+    }), { wrapper: TestApp });
+    await waitFor(() => expect(chatSignal).toBeDefined());
+    act(() => result.current.updateConfig(() => ({ privacyMode: true })));
+    await waitFor(() => expect(chatSignal?.aborted).toBe(true));
+    expect(result.current.ai.active).toBe(false);
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('excludes Web Index observations from AI evidence without Nostr opt-in', () => {
+    const result: SearchResult = {
+      ...results[0], provider: 'web-index',
+      nostrEvent: { id: 'event', pubkey: 'author', sig: 'signature', kind: 39697, created_at: 1, tags: [], content: '' },
+    };
+    expect(buildEvidence([result], false)).toEqual([]);
+    expect(buildEvidence([result], true)).toHaveLength(1);
+    for (const provider of ['web-index', 'cached-index', 'nostr-bookmark', 'nostra-index', 'nostr-wiki', 'git', 'community', 'keyword-stake']) {
+      expect(buildEvidence([{ ...results[0], provider }], false), provider).toEqual([]);
+    }
   });
 });

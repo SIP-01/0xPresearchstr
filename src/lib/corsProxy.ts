@@ -73,6 +73,7 @@ export async function proxiedFetch(
   let lastError: unknown = new Error('All CORS proxies failed');
 
   for (const proxy of CORS_PROXIES) {
+    init?.signal?.throwIfAborted();
     try {
       const signal = AbortSignal.any([
         ...(init?.signal ? [init.signal] : []),
@@ -86,6 +87,7 @@ export async function proxiedFetch(
       // 5xx / 429 → proxy or target gateway trouble; try the next proxy.
       lastError = new Error(`HTTP ${res.status} via ${new URL(proxy).hostname}`);
     } catch (err) {
+      if (init?.signal?.aborted) throw init.signal.reason;
       lastError = err;
     }
   }

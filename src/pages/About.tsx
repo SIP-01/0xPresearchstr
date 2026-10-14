@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 export default function About() {
   useSeoMeta({
     title: 'About - Presearchstr',
-    description: 'Learn about Presearchstr — the community-driven, Nostr-native fork of 0xSearchstr with Presearch-style keyword staking. Nostr-first, with SearXNG, Wikipedia, Hacker News, and Tor fallback.',
+    description: 'Learn about Presearchstr — the community-driven, Nostr-native fork of 0xSearchstr with Precommunity keyword ads. Nostr-first, with SearXNG, Wikipedia, Hacker News, and Tor fallback.',
   });
 
   return (
@@ -29,7 +29,9 @@ export default function About() {
           The <strong>community-driven fork of 0xSearchstr</strong>, inspired by Presearch.
           A decentralized search aggregator built on a <strong>plugin-based provider architecture</strong>.
           Every search source is a standalone provider that returns a universal <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">SearchResult[]</code>.
-          The UI merges, deduplicates, and ranks results from all providers — no backend, no crawler, no tracking.
+          The UI merges, deduplicates, and ranks results from all providers in your browser.
+          Organic search works without a configured backend; Precommunity ads and engine-provided
+          search or AI use the engine backend.
         </p>
 
         <Separator className="mb-8" />
@@ -69,25 +71,29 @@ export default function About() {
           </CardContent>
         </Card>
 
-        {/* Keyword staking */}
-        <h2 className="text-xl font-semibold mb-4">Keyword Staking — Presearch, but Nostr</h2>
+        {/* Keyword advertising */}
+        <h2 className="text-xl font-semibold mb-4">PRE community Privacy Ads</h2>
         <Card className="mb-8 border-primary/20">
           <CardContent className="py-6">
             <div className="flex items-start gap-3 mb-4">
               <Gem className="w-5 h-5 text-primary shrink-0 mt-0.5" />
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Presearch lets advertisers stake PRE tokens on keywords. Here, your{' '}
-                <strong className="text-foreground">Nostr identity is the stake</strong>: sign an addressable
-                event binding a keyword to your link, and it takes the top placement whenever anyone
-                searches that keyword — on every compatible client.
+                Privacy ads through{' '}
+                <a href="https://precommunity.org/keyword-market" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">PRE community</a>{' '}
+                use only your search query to resolve blockchain keyword ad data from the community around the PRE token.
+                A submitted text search can show one clearly marked{' '}
+                <strong className="text-foreground">Sponsored · PRE community</strong> card in Web and All,
+                below any instant or AI answers and above organic results.
               </p>
             </div>
             <ul className="space-y-2 text-sm text-muted-foreground">
               {[
-                'One stake per keyword per npub — re-staking replaces your previous stake',
-                'No tokens, no auction, no pay-to-win — signatures make stakes attributable and Sybil-aware',
-                'Stakes are ordinary Nostr events (kind 30078) — censorship-resistant and fork-portable',
-                'Search any staked keyword and the community stake shows above organic results',
+                'The engine backend resolves ads with a server-only API key',
+                'Ads are separate from organic ranking, result counts, votes, indexing, and AI evidence',
+                'A completed lookup without an ad shows “Your ad could be here” with a link to the Keyword Marketplace, without promising keyword availability',
+                'PRE community ads and marketplace invitations remain active in Privacy Mode for eligible submitted text searches in Web and All',
+                'NIP-19 identifiers, NIP-05 addresses, URLs, and math are excluded from ad requests',
+                'Older Nostr keyword stakes remain visible in the Explore archive, without search placement',
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2">
                   <span className="text-primary/60 mt-0.5 shrink-0">+</span>
@@ -110,11 +116,10 @@ export default function About() {
               <Step number={1} icon={<FileText className="w-4 h-4 text-primary" />} title="Web Index Provider (SIP-01)" description="Searches the shared kind 39697 document index — pages observed by independent per-device indexers, ranked by observation count and recency." active />
               <Step number={2} icon={<Database className="w-4 h-4 text-primary" />} title="Cached Index Provider" description="Reads the legacy federated query cache — hits from both Presearchstr and 0xSearchstr indexers are instant." active />
               <Step number={3} icon={<Zap className="w-4 h-4 text-nostr" />} title="Nostr Provider" description="NIP-50 search queries to relay.nostr.band and relay.ditto.pub. Profiles, notes, articles, and files — all with rich rendering." active />
-              <Step number={4} icon={<Gem className="w-4 h-4 text-primary" />} title="Keyword Stakes Provider" description="Community-staked keywords — Nostr-native top placements, signed by the staker's own key." active />
-              <Step number={5} icon={<Globe className="w-4 h-4 text-clearnet" />} title="SearXNG Provider" description="Meta-search across DuckDuckGo, Brave, Wikipedia, and dozens more via public instances with automatic failover." active />
-              <Step number={6} icon={<BookOpen className="w-4 h-4" />} title="Wikipedia Provider" description="Direct MediaWiki API queries. No proxy needed — Wikipedia sets CORS headers." active />
-              <Step number={7} icon={<Newspaper className="w-4 h-4" />} title="Hacker News Provider" description="Algolia-powered HN search API. Stories with points, comments, and author attribution." active />
-              <Step number={8} icon={<Shield className="w-4 h-4 text-tor" />} title="Tor Provider (Ahmia)" description="Policy-compliant .onion search via Ahmia.fi with warning interstitials before opening hidden services." active />
+              <Step number={4} icon={<Globe className="w-4 h-4 text-clearnet" />} title="SearXNG Provider" description="Meta-search across DuckDuckGo, Brave, Wikipedia, and dozens more via public instances with automatic failover." active />
+              <Step number={5} icon={<BookOpen className="w-4 h-4" />} title="Wikipedia Provider" description="Direct MediaWiki API queries. No proxy needed — Wikipedia sets CORS headers." active />
+              <Step number={6} icon={<Newspaper className="w-4 h-4" />} title="Hacker News Provider" description="Algolia-powered HN search API. Stories with points, comments, and author attribution." active />
+              <Step number={7} icon={<Shield className="w-4 h-4 text-tor" />} title="Tor Provider (Ahmia)" description="Policy-compliant .onion search via Ahmia.fi with warning interstitials before opening hidden services." active />
             </div>
             <div className="mt-6 p-4 rounded-lg bg-muted/50 border border-border/50">
               <p className="text-sm text-muted-foreground">
@@ -195,11 +200,11 @@ export default function About() {
           <CardContent className="py-5">
             <ul className="space-y-3 text-sm text-muted-foreground">
               {[
-                { label: 'No backend required', detail: 'Everything runs in the browser. No servers, no crawlers, no infrastructure to maintain.' },
+                { label: 'Browser-based aggregation', detail: 'Organic search and ranking work without a configured backend. The engine backend enables ads and shared search or AI credentials.' },
                 { label: 'Nostr-native', detail: 'Nostr results are first-class citizens with rich rendering — avatars, content previews, NIP-19 links.' },
                 { label: 'Federated index', detail: 'Shares one search index with 0xSearchstr — same kinds, same tags, different signer keys. Every search on either app helps both communities.' },
-                { label: 'Keyword staking', detail: 'Presearch-style keyword placement without tokens. Your Nostr key is the stake — sign once, own the top spot for that keyword everywhere.' },
-                { label: 'Privacy as a spectrum', detail: 'Nostr-only searches never touch third-party servers. Web providers expose queries to their operators — see the threat model below and the traffic-light indicator by the search bar.' },
+                { label: 'Precommunity advertising', detail: 'One clearly marked sponsored card in Web and All, fetched independently of organic results, or a marketplace invitation when no ad is returned. Historical Nostr stakes remain archived.' },
+                { label: 'Privacy as a spectrum', detail: 'Privacy Mode limits organic search to Nostr-tier providers and disables AI answers. PRE community advertising remains active as an explicit exception — see the threat model below.' },
                 { label: 'Plugin architecture', detail: 'Every provider is a standalone module. Add Wikipedia, Hacker News, GitHub, Archive.org — one file each, no core changes.' },
                 { label: 'Incremental results', detail: 'Providers run in parallel. Results appear as each provider finishes, with live status indicators.' },
                 { label: 'Resilient', detail: 'Multiple SearXNG instances with failover. Multiple Nostr relays. Browser fallback links as last resort.' },
@@ -314,9 +319,9 @@ export default function About() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              "No backend" means <strong className="text-foreground">Presearchstr itself</strong> has no servers
-              logging you — the app is static files in your browser. It does <em>not</em> mean your queries
-              travel nowhere. Here is exactly who sees what:
+              Search aggregation runs in your browser, while ads and engine-provided search or AI
+              use the engine backend. Operators of the services you contact can see those
+              requests. Here is who receives your search text:
             </p>
 
             <div className="space-y-3">
@@ -356,13 +361,26 @@ export default function About() {
                   </p>
                 </div>
               </div>
+
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                <span className="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                <div className="text-sm">
+                  <span className="font-medium text-foreground">PRE community privacy ads</span>
+                  <p className="text-muted-foreground mt-0.5">
+                    Privacy ads stay active for eligible Web/All text queries in Privacy Mode.
+                    Our backend forwards only search text to PRE community, without your Nostr
+                    account, browser cookies, or user IP headers. Ad/report links connect your
+                    browser directly to PRE community; ad clicks are counted.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div>
               <h4 className="text-sm font-medium text-foreground mb-2">What you can do about it:</h4>
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 {[
-                  'Enable Privacy Mode (Settings) to run Nostr-tier providers only — zero third-party exposure',
+                  'Privacy Mode keeps organic results on Nostr and disables AI; PRE community privacy ads remain active for eligible Web/All text queries',
                   'Watch the traffic-light indicator next to the search bar before every search',
                   'Add your own SearXNG instance in Settings — self-hosted instances always run first',
                   'Use Tor Browser or a VPN to hide your IP from relays and APIs',
@@ -376,16 +394,16 @@ export default function About() {
             </div>
 
             <div>
-              <h4 className="text-sm font-medium text-foreground mb-2">What Presearchstr itself never does:</h4>
+              <h4 className="text-sm font-medium text-foreground mb-2">How the app limits exposure:</h4>
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 {[
-                  'Log, store, or transmit your searches to its own servers (there are none)',
-                  'Track users, fingerprint browsers, or set cookies',
-                  'Publish your queries — index events contain page metadata only, signed by a throwaway per-device indexing key',
-                  'Run its own crawler or indexing backend',
+                  'The ad API forwards only search text, without your Nostr account, browser cookies, or user IP headers; its key stays on the backend',
+                  'SIP-01 index events contain public page metadata, signed by a dedicated per-device indexing key',
+                  'Trending terms use hashes and reveal plaintext only after signals from at least three independent devices',
+                  'Ads are never added to the Nostr index or supplied as AI evidence',
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-2">
-                    <span className="text-destructive/60 mt-0.5 shrink-0">-</span>
+                    <span className="text-primary/60 mt-0.5 shrink-0">+</span>
                     <span>{item}</span>
                   </li>
                 ))}

@@ -37,11 +37,10 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: Install dependencies and build
+      - name: Install dependencies and validate
         run: |
-          npm install
-          npm run build
-          cp dist/index.html dist/404.html
+          npm ci
+          npm test
         env:
           # Project sites live at /<repo-name>/; vite.config.ts reads this.
           VITE_BASE: /${{ github.event.repository.name }}/

@@ -12,13 +12,16 @@
  *     in (Settings → AI), since Nostr content is tied to identities.
  *   - AI answers are ephemeral: displayed, never indexed into SIP-01.
  */
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { SearchResult } from '@/lib/providers/types';
+import { getProvider } from '@/lib/providers/registry';
 import { classifyQuery } from '@/lib/queryClassify';
 import { getAIProvider, ENGINE_PROXY_PROVIDER } from '@/lib/ai/registry';
 import { getAIConfig, resolveAIConfig } from '@/lib/aiConfig';
 import { useEngineAIStatus } from '@/hooks/useEngineAIStatus';
+import { useAppContext } from '@/hooks/useAppContext';
 import type { AIEvidenceItem, AIAnswer } from '@/lib/ai/types';
 
 /** Max evidence items handed to the model. */
@@ -31,7 +34,9 @@ function buildEvidence(results: SearchResult[], includeNostr: boolean): AIEviden
   const usable = results.filter((r) => {
     if (!r.url || !/^https?:\/\//i.test(r.url)) return false; // links the user can open
     if (!r.title?.trim()) return false;
-    if (!includeNostr && (r.source === 'nostr' || r.provider === 'keyword-stake' || r.provider === 'community')) return false;
+    if (!includeNostr && (r.nostrEvent || r.source === 'nostr'
+      || getProvider(r.provider)?.privacy === 'nostr'
+      || r.provider === 'keyword-stake' || r.provider === 'nostr-bookmark' || r.provider === 'nostra-index')) return false;
     return true;
   });
 
@@ -76,8 +81,10 @@ export interface UseAIAnswerResult {
 }
 
 export function useAIAnswer(query: string, results: SearchResult[], enabled: boolean): UseAIAnswerResult {
+  const { config } = useAppContext();
+  const queryClient = useQueryClient();
   const aiConfig = getAIConfig();
-  const { status: engineStatus } = useEngineAIStatus();
+  const { status: engineStatus } = useEngineAIStatus(!config.privacyMode);
   // Precedence: user's own key → engine-provided proxy → unavailable.
   const resolved = resolveAIConfig(aiConfig, engineStatus);
   const queryClass = classifyQuery(query);
@@ -87,6 +94,7 @@ export function useAIAnswer(query: string, results: SearchResult[], enabled: boo
   const evidence = buildEvidence(results, aiConfig.includeNostr);
   const shouldRun =
     enabled &&
+    !config.privacyMode &&
     aiConfig.enabled &&
     queryClass === 'text' &&
     evidence.length >= 2 &&
@@ -96,7 +104,7 @@ export function useAIAnswer(query: string, results: SearchResult[], enabled: boo
       || resolved.tier === 'community');
 
   const { data, isLoading, error } = useQuery<AIAnswer>({
-    queryKey: ['ai-answer', query, resolved.providerId, resolved.model, resolved.tier, evidence.map((e) => e.url).join('|')],
+    queryKey: ['ai-answer', query, resolved.providerId, resolved.model, resolved.tier, config.privacyMode, evidence.map((e) => e.url).join('|')],
     queryFn: async ({ signal }) => {
       const provider = resolved.tier === 'engine'
         ? ENGINE_PROXY_PROVIDER
@@ -115,11 +123,18 @@ export function useAIAnswer(query: string, results: SearchResult[], enabled: boo
     retry: 0,
   });
 
+  useEffect(() => {
+    if (config.privacyMode) {
+      void queryClient.cancelQueries({ queryKey: ['ai-answer'] });
+      void queryClient.cancelQueries({ queryKey: ['engine-ai-status'] });
+    }
+  }, [config.privacyMode, queryClient]);
+
   return {
-    answer: data,
+    answer: shouldRun ? data : undefined,
     evidence,
     isLoading: shouldRun && isLoading,
-    error: error instanceof Error ? error.message : undefined,
+    error: shouldRun && error instanceof Error ? error.message : undefined,
     active: shouldRun,
   };
 }

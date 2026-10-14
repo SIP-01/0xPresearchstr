@@ -6,6 +6,7 @@
  *   - SearXNG Instances: dynamic pool management (add custom, health, refresh)
  */
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import {
   Settings as SettingsIcon, Sun, Moon, Terminal, Search,
@@ -33,7 +34,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { useTheme } from '@/hooks/useTheme';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { ALL_SOURCE_TABS, DEFAULT_TAB_CONFIG } from '@/components/SourceTabs';
+import { ALL_SOURCE_TABS, DEFAULT_TAB_CONFIG } from '@/lib/sourceTabs';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useSearxngInstances } from '@/hooks/useSearxngInstances';
 import { useSearchRelayPool, useIndexRelayPool, useGitRelayPool, useWikiRelayPool } from '@/hooks/useSearchRelayPool';
@@ -323,8 +324,8 @@ function PrivacySection() {
             </div>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               {privacyMode
-                ? 'Active. Only Nostr-tier providers run — no clearnet APIs, no CORS proxies. Fewer results, zero third-party exposure.'
-                : 'Nostr-only search. Disables every provider that talks to clearnet APIs or CORS proxies — at the cost of fewer results.'}
+                ? 'Active. Nostr organic results; AI disabled. PRE community privacy ads still resolve eligible Web/All queries through the backend.'
+                : 'Nostr-only organic results with clearnet APIs, proxies, and AI disabled. PRE community privacy ads remain active for eligible Web/All queries.'}
             </p>
           </div>
         </CardContent>
@@ -406,6 +407,23 @@ function PrivacySection() {
             </div>
           );
         })}
+        <div className="px-3 py-2.5 text-xs border-t border-border/40">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium">PRE community privacy ads</span>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-500/30 text-red-600 dark:text-red-500">
+              engine proxy
+            </Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/30 text-amber-600 dark:text-amber-500">
+              Privacy Mode exception
+            </Badge>
+          </div>
+          <p className="text-muted-foreground/80 leading-relaxed mt-0.5">
+            PRE community (the PRE token community) resolves blockchain keyword ad data from eligible
+            Web/All text queries through our backend, even in Privacy Mode. The API sends only
+            search text, without your Nostr account, browser cookies, or user IP headers.
+            Ad/report links connect your browser directly to PRE community; ad clicks are counted.
+          </p>
+        </div>
         {/* The AI answer layer is opt-in and gets the evidence pack, not
             the raw feed — spell its boundary out next to the providers. */}
         <div className={cn('px-3 py-2.5 text-xs border-t border-border/40')}>
@@ -428,10 +446,11 @@ function PrivacySection() {
       </div>
 
       <p className="text-[11px] text-muted-foreground/70 mt-3 leading-relaxed">
-        Presearchstr itself never logs, stores, or transmits your searches to its own servers — there are no
-        servers. Contributed index entries are published to public Nostr relays under this device's dedicated
-        indexing identity (see the Auto Indexer tab), never under your personal Nostr account, and never contain
-        your query. For the full picture, read the <a href="/about" className="text-primary hover:underline">threat model</a>.
+        Organic search aggregation runs in your browser. Ads and engine-provided search or AI use the engine
+        backend, whose operator can see those requests. Contributed index entries are published to public
+        Nostr relays under this device's dedicated indexing identity (see the Auto Indexer tab), never under
+        your personal Nostr account, and never contain your query. For the full picture, read the{' '}
+        <Link to="/about" className="text-primary hover:underline">threat model</Link>.
       </p>
     </section>
   );
@@ -747,7 +766,7 @@ function SearchTabsSection() {
               </div>
 
               {/* Tab identity */}
-              <span className="text-muted-foreground shrink-0">{meta.icon}</span>
+              <span className="text-muted-foreground shrink-0"><meta.icon className="w-3.5 h-3.5" /></span>
               <span className="text-sm font-medium flex-1 min-w-0 truncate">{meta.label}</span>
 
               {/* Default marker */}
@@ -799,7 +818,6 @@ const ENGINE_META: Record<string, { icon: React.ReactNode; note: string }> = {
   parallel: { icon: <Sparkles className="w-4 h-4" />, note: 'Parallel Search API — long dense excerpts (BYOK, free starting credits); every result feeds the index' },
   'web-index': { icon: <Search className="w-4 h-4" />, note: 'The shared SIP-01 community web index (kind 39697)' },
   'cached-index': { icon: <Database className="w-4 h-4" />, note: 'Legacy federated query cache (kind 30078)' },
-  'keyword-stakes': { icon: <Star className="w-4 h-4" />, note: 'Community keyword stakes — Presearch-style top placements' },
   community: { icon: <Check className="w-4 h-4" />, note: 'User-curated submissions + NIP-B0 bookmarks' },
   nostr: { icon: <Zap className="w-4 h-4" />, note: 'NIP-50 full-text search: notes, articles, wiki, files, torrents, code' },
   wikipedia: { icon: <Globe className="w-4 h-4" />, note: 'Wikipedia articles (direct MediaWiki API)' },

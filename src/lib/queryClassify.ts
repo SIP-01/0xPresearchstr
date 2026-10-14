@@ -54,7 +54,7 @@ export function classifyQuery(query: string): QueryClass {
  * - math:   no providers at all (the calculator IS the answer)
  * - nip19:  only the Nostr provider (a bech32 id means nothing to clearnet engines)
  * - nip05:  Nostr only (mentions); the address resolves via instant answer
- * - url:    Nostr-tier only — the SIP-01 index, cache, community, and stakes
+ * - url:    Nostr-tier only — the SIP-01 index, cache, and community
  *           answer "is this page indexed?"; web engines don't need a URL
  */
 export function providerAllowlistFor(cls: QueryClass): Set<string> | undefined {
@@ -65,7 +65,7 @@ export function providerAllowlistFor(cls: QueryClass): Set<string> | undefined {
     case 'nip05':
       return new Set(['nostr']);
     case 'url':
-      return new Set(['web-index', 'cached-index', 'community', 'keyword-stakes', 'nostr']);
+      return new Set(['web-index', 'cached-index', 'community', 'nostr']);
     case 'text':
       return undefined;
   }

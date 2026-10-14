@@ -3,6 +3,7 @@ import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { parseBlossomServerList } from '@/lib/appBlossom';
+import type { AccountConfig } from '@/contexts/AppContext';
 
 /**
  * NostrSync - Syncs user's Nostr data
@@ -15,87 +16,60 @@ import { parseBlossomServerList } from '@/lib/appBlossom';
 export function NostrSync() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
-  const { config, updateConfig } = useAppContext();
+  const { accountPubkey, updateAccountConfig } = useAppContext();
+  const pubkey = user?.pubkey;
 
   useEffect(() => {
-    if (!user) return;
+    if (!pubkey || accountPubkey !== pubkey) return;
+    const controller = new AbortController();
 
-    const syncRelaysFromNostr = async () => {
+    const syncListsFromNostr = async () => {
       try {
         const events = await nostr.query(
-          [{ kinds: [10002], authors: [user.pubkey], limit: 1 }],
-          { signal: AbortSignal.timeout(5000) }
+          [
+            { kinds: [10002], authors: [pubkey], limit: 1 },
+            { kinds: [10063], authors: [pubkey], limit: 1 },
+          ],
+          { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]) },
         );
+        if (controller.signal.aborted) return;
 
-        if (events.length > 0) {
-          const event = events[0];
+        const ownEvents = events.filter((event) => event.pubkey === pubkey)
+          .sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id));
+        const relayEvent = ownEvents.find((event) => event.kind === 10002);
+        const blossomEvent = ownEvents.find((event) => event.kind === 10063);
 
-          // Only update if the event is newer than our stored data
-          if (event.created_at > config.relayMetadata.updatedAt) {
-            const fetchedRelays = event.tags
-              .filter(([name]) => name === 'r')
+        updateAccountConfig(pubkey, (current) => {
+          if (controller.signal.aborted) return {};
+          const patch: Partial<AccountConfig> = {};
+          if (relayEvent && relayEvent.created_at > (current.relayMetadata?.updatedAt ?? 0)) {
+            const relays = relayEvent.tags
+              .filter(([name, , marker]) => name === 'r' && (!marker || marker === 'read' || marker === 'write'))
               .map(([_, url, marker]) => ({
                 url,
                 read: !marker || marker === 'read',
                 write: !marker || marker === 'write',
-              }));
-
-            if (fetchedRelays.length > 0) {
-              console.log('Syncing relay list from Nostr:', fetchedRelays);
-              updateConfig((current) => ({
-                ...current,
-                relayMetadata: {
-                  relays: fetchedRelays,
-                  updatedAt: event.created_at,
-                },
-              }));
-            }
+              }))
+              .filter(({ url }) => {
+                try { return ['ws:', 'wss:'].includes(new URL(url).protocol); } catch { return false; }
+              });
+            patch.relayMetadata = { relays, updatedAt: relayEvent.created_at };
           }
-        }
+          if (blossomEvent && blossomEvent.created_at > (current.blossomServerMetadata?.updatedAt ?? 0)) {
+            const servers = parseBlossomServerList(blossomEvent)
+              .filter((url) => new URL(url).protocol === 'https:');
+            patch.blossomServerMetadata = { servers, updatedAt: blossomEvent.created_at };
+          }
+          return patch;
+        });
       } catch (error) {
-        console.error('Failed to sync relays from Nostr:', error);
+        if (!controller.signal.aborted) console.error('Failed to sync account lists from Nostr:', error);
       }
     };
 
-    syncRelaysFromNostr();
-  }, [user, config.relayMetadata.updatedAt, nostr, updateConfig]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const syncBlossomServersFromNostr = async () => {
-      try {
-        const events = await nostr.query(
-          [{ kinds: [10063], authors: [user.pubkey], limit: 1 }],
-          { signal: AbortSignal.timeout(5000) }
-        );
-
-        if (events.length > 0) {
-          const event = events[0];
-
-          // Only update if the event is newer than our stored data
-          if (event.created_at > config.blossomServerMetadata.updatedAt) {
-            const fetchedServers = parseBlossomServerList(event);
-
-            if (fetchedServers.length > 0) {
-              console.log('Syncing Blossom server list from Nostr:', fetchedServers);
-              updateConfig((current) => ({
-                ...current,
-                blossomServerMetadata: {
-                  servers: fetchedServers,
-                  updatedAt: event.created_at,
-                },
-              }));
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to sync Blossom servers from Nostr:', error);
-      }
-    };
-
-    syncBlossomServersFromNostr();
-  }, [user, config.blossomServerMetadata.updatedAt, nostr, updateConfig]);
+    void syncListsFromNostr();
+    return () => controller.abort();
+  }, [pubkey, accountPubkey, nostr, updateAccountConfig]);
 
   return null;
 }

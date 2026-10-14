@@ -22,7 +22,7 @@ import { useQuery } from '@tanstack/react-query';
 import { nip19 } from 'nostr-tools';
 import { NIP05 } from '@nostrify/nostrify';
 
-import { evaluateMath, formatMathResult, isMathQuery } from '@/lib/calculator';
+import { evaluateMath, formatMathResult } from '@/lib/calculator';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { classifyQuery } from '@/lib/queryClassify';
 import { parseQuery, textOnly } from '@/lib/queryParser';
@@ -339,12 +339,14 @@ export function useInstantAnswer(query: string, enabled: boolean): {
     retry: 0,
   });
 
-  const answer = calculator
-    ?? nip19Answer
-    ?? (nip05Enabled ? nip05Answer ?? null : null)
-    ?? (urlEnabled ? urlAnswer ?? null : null)
-    ?? (wikiEnabled ? wikiAnswer ?? null : null)
-    ?? (ddgEnabled ? ddgAnswer ?? null : null);
+  const answer = [
+    calculator,
+    nip19Answer,
+    nip05Enabled ? nip05Answer : null,
+    urlEnabled ? urlAnswer : null,
+    wikiEnabled ? wikiAnswer : null,
+    ddgEnabled ? ddgAnswer : null,
+  ].find((candidate) => candidate != null) ?? null;
 
   return { answer, isLoading: wikiEnabled && isLoading };
 }

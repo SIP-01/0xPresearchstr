@@ -97,6 +97,11 @@ function getTag(event: NostrEvent, name: string): string | undefined {
   return event.tags.find(([n]) => n === name)?.[1];
 }
 
+function isContentType(value: unknown): value is ContentType {
+  return typeof value === 'string'
+    && ['torrent', 'onion', 'ipfs', 'video', 'audio', 'pdf', 'web', 'other'].includes(value);
+}
+
 /** Map a content type to the source tab it belongs to. */
 function sourceForType(type: ContentType): SearchResult['source'] {
   return type === 'onion' ? 'tor' : 'web';
@@ -123,8 +128,8 @@ export function parseSubmissionEvent(event: NostrEvent): SearchResult | null {
   const url = getTag(event, 'url');
   if (!title?.trim() || !url || !isValidSubmissionUrl(url)) return null;
 
-  const typeTag = getTag(event, 'type') as ContentType | undefined;
-  const type = typeTag ?? detectContentType(url);
+  const typeTag = getTag(event, 'type');
+  const type = isContentType(typeTag) ? typeTag : detectContentType(url);
 
   return {
     id: event.id,
@@ -218,12 +223,31 @@ function base64ToBytes(b64: string): Uint8Array {
 }
 
 interface NostraPayload {
-  title?: string;
-  url?: string;
+  title: string;
+  url: string;
   type?: ContentType;
   description?: string;
   tags?: string[];
-  lang?: string;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item: unknown) => typeof item === 'string');
+}
+
+function parseNostraPayload(value: unknown): NostraPayload | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const payload = value as Record<string, unknown>;
+  if (typeof payload.title !== 'string' || typeof payload.url !== 'string') return null;
+  if (payload.description !== undefined && typeof payload.description !== 'string') return null;
+  if (payload.tags !== undefined && !isStringArray(payload.tags)) return null;
+  if (payload.type !== undefined && !isContentType(payload.type)) return null;
+  return {
+    title: payload.title,
+    url: payload.url,
+    description: payload.description,
+    tags: payload.tags,
+    type: payload.type,
+  };
 }
 
 /** Decrypt a NOSTRA_ENC_V1 payload. Returns null on plaintext or failure. */
@@ -238,7 +262,7 @@ async function decryptNostraPayload(content: string): Promise<NostraPayload | nu
     if (ivB64 === 'RAW') {
       // Their fallback when Web Crypto is unavailable: base64-encoded JSON.
       const json = decodeURIComponent(escape(atob(cipherB64)));
-      return JSON.parse(json) as NostraPayload;
+      return parseNostraPayload(JSON.parse(json));
     }
 
     const key = await getNostraKey();
@@ -247,7 +271,7 @@ async function decryptNostraPayload(content: string): Promise<NostraPayload | nu
       key,
       base64ToBytes(cipherB64) as BufferSource,
     );
-    return JSON.parse(new TextDecoder().decode(plain)) as NostraPayload;
+    return parseNostraPayload(JSON.parse(new TextDecoder().decode(plain)));
   } catch {
     return null;
   }
@@ -265,8 +289,8 @@ export async function parseNostraEvent(event: NostrEvent): Promise<SearchResult 
   let title: string | undefined;
   let url: string | undefined;
   let type: ContentType | undefined;
-  let description = '';
-  let tags: string[] = [];
+  let description: string;
+  let tags: string[];
 
   if (event.content.startsWith('NOSTRA_ENC_V1:')) {
     const payload = await decryptNostraPayload(event.content);

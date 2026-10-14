@@ -34,4 +34,4 @@ RUN npm install --omit=dev
 
 EXPOSE 7777 8080
 
-CMD ["npx", "tsx", "src/index.ts"]
+CMD ["npm", "start"]

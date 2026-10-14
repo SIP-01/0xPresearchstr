@@ -25,14 +25,12 @@ import {
   removeCustomSearchRelay,
   getHiddenSearchRelays,
   hideDefaultSearchRelay,
-  restoreDefaultSearchRelay,
   restoreAllDefaultSearchRelays,
   getCustomIndexRelays,
   addCustomIndexRelay,
   removeCustomIndexRelay,
   getHiddenIndexRelays,
   hideDefaultIndexRelay,
-  restoreDefaultIndexRelay,
   restoreAllDefaultIndexRelays,
   gitRelays,
   wikiRelays,
@@ -148,7 +146,7 @@ function useRelayPool(store: PoolStore) {
     );
 
     setTesting(false);
-  }, [pool]);
+  }, [pool, store.probeKinds]);
 
   const hiddenCount = store.getHidden().length;
 

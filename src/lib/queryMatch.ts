@@ -98,6 +98,8 @@ export function termMatches(haystack: string, term: string): boolean {
   return (
     haystack.includes(` ${term} `)
     || (folded !== term && haystack.includes(` ${folded} `))
+    // An -es ending can be page+s or class+es; check both singular forms.
+    || (term.length > 3 && term.endsWith('es') && haystack.includes(` ${term.slice(0, -1)} `))
     // Substring fallback for compounds ("websearch" contains "search") —
     // long terms only: a 2–3 char substring ("to", "ai") matches inside
     // unrelated words ("history", "said") and destroys the guard's value.

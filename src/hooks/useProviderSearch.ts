@@ -10,7 +10,7 @@
  * Returns per-provider status so the UI can show live progress indicators.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import type { SearchResult, SearchSource, ProviderSearchResponse } from '@/lib/providers/types';
 import { getProvidersForPrivacy, getProvidersForSource } from '@/lib/providers/registry';
@@ -18,6 +18,7 @@ import { classifyQuery, providerAllowlistFor } from '@/lib/queryClassify';
 import { parseQuery } from '@/lib/queryParser';
 import { applyHardConstraints } from '@/lib/queryEngine';
 import { sortByQueryRelevance } from '@/lib/resultRank';
+import { normalizeIndexUrl } from '@/lib/webIndex';
 import { isHiddenResult } from '@/lib/moderation';
 import { useSearchIndexer } from '@/hooks/useSearchIndexer';
 import { useModerationSet } from '@/hooks/useModeration';
@@ -36,7 +37,7 @@ export interface ProviderState {
 
 export interface UseProviderSearchOptions {
   query: string;
-  source: SearchSource | 'all';
+  source: SearchSource | 'all' | 'index';
   enabled?: boolean;
 }
 
@@ -61,19 +62,13 @@ export interface UseProviderSearchResult {
   suppressedProviders: { id: string; name: string }[];
 }
 
-/**
- * The minimum Nostr results before we skip web providers (Nostr-first strategy).
- * When searching "all", if Nostr returns this many results, web/wiki/news are
- * still queried but Nostr results are shown immediately.
- */
-const _NOSTR_ENOUGH = 8;
+const EMPTY_RESULTS: SearchResult[] = [];
 
 export function useProviderSearch({
   query,
   source,
   enabled = true,
 }: UseProviderSearchOptions): UseProviderSearchResult {
-  const queryClient = useQueryClient();
   const { config } = useAppContext();
   const privacyMode = config.privacyMode;
   // Result language filter (Settings → General) — forwarded to every
@@ -107,46 +102,42 @@ export function useProviderSearch({
   // Owner-signed moderation list — hidden URLs/event ids are filtered for everyone.
   const moderationSet = useModerationSet();
 
-  // Provider states tracked outside React Query for per-provider granularity.
-  const [providerStates, setProviderStates] = useState<Map<string, ProviderState>>(new Map());
-  const statesRef = useRef(providerStates);
-  statesRef.current = providerStates;
+  const providerIds = useMemo(() => activeProviders.map((p) => p.id), [activeProviders]);
 
   // ─── Result streaming ──────────────────────────────────────────────
   // Results render as each provider resolves instead of waiting for the
   // slowest one (SearXNG via proxy can take seconds; the Nostr index
   // answers in ~100ms). The final complete set still lands in the query
   // cache as `data`.
-  const [streamed, setStreamed] = useState<SearchResult[]>([]);
-  const streamKey = `${query}||${source}||${privacyMode}||${languageFilter.join(',')}`;
-  const streamKeyRef = useRef(streamKey);
-  if (streamKeyRef.current !== streamKey) {
-    // Query changed — reset the stream before any new appends land.
-    streamKeyRef.current = streamKey;
-    setStreamed([]);
-  }
+  const streamKey = JSON.stringify([query, source, privacyMode, languageFilter, providerIds]);
+  const [progress, setProgress] = useState<{
+    key: string;
+    results: SearchResult[];
+    providers: Map<string, ProviderState>;
+  }>({ key: '', results: [], providers: new Map() });
 
   /** Append a provider's results to the visible stream (dedupe + constraints + coverage rank). */
-  const appendStreamed = useCallback((key: string, fresh: SearchResult[], query: string) => {
+  const appendStreamed = useCallback((key: string, fresh: SearchResult[], query: string, signal: AbortSignal) => {
     if (fresh.length === 0) return;
-    setStreamed((prev) => {
-      if (streamKeyRef.current !== key) return prev; // stale provider from an old query
+    setProgress((prev) => {
+      if (signal.aborted || prev.key !== key) return prev;
       // Hard constraints (filters + NOT) apply to EVERY provider's results —
       // an engine that misunderstood site: can't leak a wrong result through.
       const constrained = applyHardConstraints(fresh, parseQuery(query));
-      const merged = deduplicateResults([...prev, ...constrained]);
-      return sortByQueryRelevance(merged, query);
+      const merged = deduplicateResults([...prev.results, ...constrained]);
+      return { ...prev, results: sortByQueryRelevance(merged, query) };
     });
   }, []);
 
-  const updateProviderState = useCallback((id: string, update: Partial<ProviderState>) => {
-    setProviderStates((prev) => {
-      const next = new Map(prev);
+  const updateProviderState = useCallback((key: string, id: string, update: Partial<ProviderState>, signal: AbortSignal) => {
+    setProgress((prev) => {
+      if (signal.aborted || prev.key !== key) return prev;
+      const next = new Map(prev.providers);
       const existing = next.get(id);
       if (existing) {
         next.set(id, { ...existing, ...update });
       }
-      return next;
+      return { ...prev, providers: next };
     });
   }, []);
 
@@ -155,9 +146,10 @@ export function useProviderSearch({
     results: SearchResult[];
     suggestions: string[];
   }>({
-    queryKey: ['provider-search', query, source, privacyMode, languageFilter],
+    queryKey: ['provider-search', query, source, privacyMode, languageFilter, providerIds],
     queryFn: async ({ signal }) => {
       if (!query.trim()) return { results: [], suggestions: [] };
+      signal.throwIfAborted();
 
       // Initialize provider states.
       const initialStates = new Map<string, ProviderState>();
@@ -170,7 +162,7 @@ export function useProviderSearch({
           resultCount: 0,
         });
       }
-      setProviderStates(initialStates);
+      setProgress({ key: streamKey, results: [], providers: initialStates });
 
       // Run all providers in parallel.
       const results: SearchResult[] = [];
@@ -189,23 +181,23 @@ export function useProviderSearch({
 
             const latencyMs = Math.round(performance.now() - start);
 
-            updateProviderState(provider.id, {
+            updateProviderState(streamKey, provider.id, {
               status: 'done',
               resultCount: response.results.length,
               latencyMs,
-            });
+            }, signal);
 
             // Stream: show this provider's results immediately — the UI
             // re-renders per provider completion, not at the very end.
-            appendStreamed(streamKey, response.results, query);
+            appendStreamed(streamKey, response.results, query, signal);
             return response;
           } catch {
             const latencyMs = Math.round(performance.now() - start);
-            updateProviderState(provider.id, {
+            updateProviderState(streamKey, provider.id, {
               status: 'error',
               resultCount: 0,
               latencyMs,
-            });
+            }, signal);
             return { results: [], suggestions: [] } as ProviderSearchResponse;
           }
         }),
@@ -243,7 +235,7 @@ export function useProviderSearch({
 
   // The visible result set: the completed (cached) data once available,
   // the live stream while providers are still resolving.
-  const baseResults = data?.results ?? streamed;
+  const baseResults = data?.results ?? (progress.key === streamKey ? progress.results : EMPTY_RESULTS);
 
   // Apply owner-signed moderation filtering to whatever is visible.
   // (Additive: until the moderation list loads, nothing is filtered.)
@@ -256,14 +248,14 @@ export function useProviderSearch({
   // Reset provider states when query clears.
   const providers = useMemo(() => {
     if (!query.trim()) return [];
-    return activeProviders.map((p) => providerStates.get(p.id) ?? {
+    return activeProviders.map<ProviderState>((p) => (progress.key === streamKey ? progress.providers.get(p.id) : undefined) ?? {
       id: p.id,
       name: p.name,
       source: p.source,
-      status: 'idle' as const,
+      status: isFetching ? 'searching' : data ? 'done' : 'idle',
       resultCount: 0,
     });
-  }, [activeProviders, providerStates, query]);
+  }, [activeProviders, progress, streamKey, query, isFetching, data]);
 
   const isLoading = providers.some((p) => p.status === 'searching');
   const isEmpty = query.trim().length > 0 && !isLoading && allResults.length === 0;
@@ -275,13 +267,15 @@ export function useProviderSearch({
     if (
       allResults.length > 0 &&
       query.trim() &&
+      enabled &&
+      !isFetching &&
       !isLoading &&
-      indexedQueryRef.current !== query
+      indexedQueryRef.current !== streamKey
     ) {
-      indexedQueryRef.current = query;
+      indexedQueryRef.current = streamKey;
       void indexResults(query, allResults);
     }
-  }, [allResults, query, isLoading, indexResults]);
+  }, [allResults, query, enabled, isFetching, isLoading, streamKey, indexResults]);
 
   // Counts per source.
   const counts = useMemo(() => {
@@ -291,15 +285,6 @@ export function useProviderSearch({
     }
     return c as Record<SearchSource | 'all', number>;
   }, [allResults]);
-
-  // Invalidate stale queries when source changes.
-  const prevSourceRef = useRef(source);
-  if (prevSourceRef.current !== source) {
-    prevSourceRef.current = source;
-    if (query.trim()) {
-      queryClient.invalidateQueries({ queryKey: ['provider-search', query, source] });
-    }
-  }
 
   return {
     results: allResults,
@@ -315,11 +300,11 @@ export function useProviderSearch({
 }
 
 /** Deduplicate results by normalized URL. Prefer higher-scored versions. */
-function deduplicateResults(results: SearchResult[]): SearchResult[] {
+export function deduplicateResults(results: SearchResult[]): SearchResult[] {
   const map = new Map<string, SearchResult>();
 
   for (const r of results) {
-    const key = normalizeUrl(r.url) || r.id;
+    const key = normalizeIndexUrl(r.url) ?? (r.url || r.id);
     const existing = map.get(key);
     if (!existing || (r.score ?? 0) > (existing.score ?? 0)) {
       map.set(key, r);
@@ -327,13 +312,4 @@ function deduplicateResults(results: SearchResult[]): SearchResult[] {
   }
 
   return [...map.values()];
-}
-
-function normalizeUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    return `${u.hostname}${u.pathname}`.replace(/\/$/, '').toLowerCase();
-  } catch {
-    return url.toLowerCase();
-  }
 }

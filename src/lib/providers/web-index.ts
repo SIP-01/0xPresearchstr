@@ -18,8 +18,8 @@
  *
  * Observations are grouped by document id (`d` tag); distinct indexer count
  * is the core ranking signal ("N independent indexers saw this page").
- * Matched groups are integrity-checked per spec §18 step 2 (d ↔ normalized
- * u, x ↔ content) via verifyObservation() before display.
+ * Every observation is integrity-checked before grouping, so malformed
+ * entries cannot replace valid metadata or contribute to agreement.
  */
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
@@ -157,7 +157,13 @@ export const webIndexProvider: SearchProvider = {
       .filter((o): o is IndexObservation => o !== null)
       .filter((o) => passesLanguageFilter(o.language, langFilter));
 
-    const groups = groupByDocument(observations, eventRelays);
+    const checked = await Promise.all(
+      observations.map(async (obs) => ((await verifyObservation(obs)) ? obs : null)),
+    );
+    const groups = groupByDocument(
+      checked.filter((obs): obs is IndexObservation => obs !== null),
+      eventRelays,
+    );
 
     // AUTHORITATIVE local evaluation: the query is parsed ONCE (memoized)
     // and every document group is evaluated against the structured query —
@@ -168,13 +174,8 @@ export const webIndexProvider: SearchProvider = {
     const candidates = [...groups.values()]
       .map((group) => ({ group, m: evaluateQuery(docFromObservation(group.latest), parsed) }))
       .filter(({ m }) => m.match);
-    const verified = await Promise.all(
-      candidates.map(async (c) => ((await verifyObservation(c.group.latest)) ? c : null)),
-    );
-
     const results: SearchResult[] = [];
-    for (const c of verified) {
-      if (!c) continue;
+    for (const c of candidates) {
       const { latest } = c.group;
 
       // Sybil-aware agreement bonus: an extra indexer only counts when it

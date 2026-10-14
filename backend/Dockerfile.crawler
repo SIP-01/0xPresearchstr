@@ -35,4 +35,4 @@ WORKDIR /app/${SERVICE}
 RUN npm install --omit=dev
 
 # Default command: run the service.
-CMD ["npx", "tsx", "src/index.ts"]
+CMD ["npm", "start"]

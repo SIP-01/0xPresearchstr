@@ -289,8 +289,8 @@ export function parseIndexEvent(event: NostrEvent): IndexObservation | null {
   const normalized = normalizeIndexUrl(url);
   if (!normalized) return null;
 
-  let title = '';
-  let description = '';
+  let title: string;
+  let description: string;
   let image: string | undefined;
   try {
     const parsed = JSON.parse(event.content) as Record<string, unknown>;

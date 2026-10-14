@@ -329,7 +329,14 @@ export function parseAdminAction(content: string): AdminAction | string {
     return 'enabled must be a boolean';
   }
 
-  return a as AdminAction;
+  return {
+    action: a.action,
+    endpoint: typeof a.endpoint === 'string' ? a.endpoint : undefined,
+    model: typeof a.model === 'string' ? a.model : undefined,
+    apiKey: typeof a.apiKey === 'string' ? a.apiKey : undefined,
+    providerName: typeof a.providerName === 'string' ? a.providerName : undefined,
+    enabled: typeof a.enabled === 'boolean' ? a.enabled : undefined,
+  };
 }
 
 /** Apply a validated action to the current config. Returns the new config

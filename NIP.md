@@ -9,7 +9,7 @@ This engine's identity is explicit and centralized in
 |---|---|---|
 | SIP-01 observations (kind 39697) | `widx:*` (SIP-01 spec) | **Protocol data — shared with every SIP-01 client** |
 | Legacy query cache (kind 30078) | `0xsearchstr:cache:*` | Fork-family federation (frozen, read-only here) |
-| Keyword stakes (kind 30078) | `0xsearchstr:stake:*` | Fork-family federation (by design — one stake shows on every compatible client) |
+| Keyword stakes (kind 30078) | `0xsearchstr:stake:*` | Historical fork-family data — read by Explore and admin statistics; search placement retired |
 | Community submissions (kind 30078) | `0xsearchstr:submit:*` | Fork-family federation |
 | Term signals (kind 30078) | `0xsearchstr:term:*` / `0xsearchstr:term-reveal:*` | Fork-family federation (hashed k-anonymity) |
 | **Moderation labels** (NIP-32, kind 1985) | `presearchstr.moderation` | **This engine only** — trusted authors are this app's owner + role lists |
@@ -44,7 +44,7 @@ formats. Current support:
 | NIP-56 | Reporting | 1984 | ✅ write (Policy page abuse reports, with NIP-32 labels) |
 | NIP-65 | Relay list metadata | 10002 | ✅ read + write (Settings → Your Relays) |
 | NIP-77 | Negentropy sync | — | 📖 documented in SIP-01 §15 (relay-to-relay, nothing client-side) |
-| NIP-78 | App-specific data | 30078 | ✅ submissions / stakes / term signals (read + write) · legacy cache (read-only, see below) |
+| NIP-78 | App-specific data | 30078 | ✅ submissions / term signals (read + write) · legacy cache and archived stakes (read-only, see below) |
 | NIP-92 | Media attachments (`imeta`) | 1 | ✅ read (inline thumbnails in results) |
 | NIP-94 | File metadata | 1063 | ✅ read (file results) |
 | NIP-B0 | Web bookmarks | 39701 | ✅ read (Community provider — user-curated links) |
@@ -54,7 +54,7 @@ formats. Current support:
 
 Considered and intentionally skipped for now: NIP-5A (nsite hosting — hosting, not
 search), NIP-85 (trusted assertions — needs a provider-selection UX; a natural future
-fit for indexer reputation and zap-weighted stake ranking), NIP-86 (relay operator API),
+fit for indexer reputation), NIP-86 (relay operator API),
 NIP-B7 (Blossom URL fallback — uploads already go through Blossom).
 
 ---
@@ -264,12 +264,17 @@ plaintext (its user just typed it) and publishes:
 
 ---
 
-## Keyword Stakes (kind 30078)
+## Keyword Stakes (kind 30078) — historical archive
 
-Presearch-style keyword staking, Nostr-native. Instead of staking PRE tokens, a user stakes
-their **identity**: an addressable event binding a normalized keyword to a URL. When a
-search query exactly matches a staked keyword, the stake renders as the top
-"Community Stake" placement.
+This preserved schema describes the former Nostr-native keyword staking feature:
+an addressable event bound a normalized keyword to a URL, signed by the staker's
+identity. Presearchstr no longer publishes stakes or uses them for search placement.
+Existing events remain readable in the Explore archive and administrator statistics.
+
+Current sponsored placements come from Precommunity's server-side resolve API,
+outside the Nostr search pipeline. They do not introduce a Nostr kind, tags, schema,
+or migration, and are never published as index events. Historical stake data and
+the event format below remain unchanged for compatible readers.
 
 ### Event Structure
 
@@ -289,14 +294,14 @@ search query exactly matches a staked keyword, the stake renders as the top
 }
 ```
 
-### Rules
+### Historical rules
 
-- **Any author may stake** — public UGC, readers do NOT filter by author. Clients MUST validate structure (`d`, `title`, `url` tags required) and apply the same URL allowlist as community submissions.
+- **Any author could stake** — public UGC, archive readers do NOT filter by author. Clients MUST validate structure (`d`, `title`, `url` tags required) and apply the same URL allowlist as community submissions.
 - **One stake per keyword per pubkey**: the d-tag is `0xsearchstr:stake:<normalized-keyword>`, so re-staking the same keyword atomically replaces the staker's previous entry.
-- **Exact-match placement**: stakes only surface when the normalized query equals the normalized keyword. No fuzzy matching — placement is predictable and relay queries stay cheap (a single `#d` filter).
-- **Competition**: when multiple pubkeys stake the same keyword, clients rank by recency (newest first) and show at most 3. The schema intentionally leaves room for **zap-weighted ranking** (kind 9735 receipts against the stake event) without a breaking change.
+- **Former exact-match placement**: clients matched a normalized search query to the normalized keyword using a single `#d` filter. This placement is retired in Presearchstr.
+- **Former competition rule**: clients ranked competing stakes by recency and showed at most three. The schema remains compatible with historical readers, but Presearchstr no longer ranks or displays stakes in search results.
 
-### Query
+### Historical search query
 
 ```json
 { "kinds": [30078], "#d": ["0xsearchstr:stake:<normalized-query>"], "limit": 25 }

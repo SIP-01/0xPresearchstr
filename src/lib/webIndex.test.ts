@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { finalizeEvent, generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools/pure';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { finalizeEvent, generateSecretKey, verifyEvent } from 'nostr-tools/pure';
+import type { NostrEvent } from '@nostrify/nostrify';
 
 import {
   WEB_INDEX_KIND,
@@ -13,6 +14,21 @@ import {
   verifyObservation,
 } from './webIndex';
 import { isValidSubmissionUrl } from './contentType';
+import { COMMUNITY_KIND, NOSTRA_D_TAG, buildSubmissionEvent, parseNostraEvent } from './communityIndex';
+import { webIndexProvider } from './providers/web-index';
+import { communityProvider } from './providers/community';
+import { cachedIndexProvider } from './providers/cached-index';
+import type { SearchResult } from './providers/types';
+
+const relayState = vi.hoisted(() => ({ events: [] as NostrEvent[] }));
+vi.mock('@/lib/appRelays', () => ({
+  getSearchRelayUrls: () => ['wss://index.example', 'wss://second-index.example'], getIndexRelayUrls: () => [],
+}));
+vi.mock('@/lib/searchRelays', () => ({
+  getSearchRelay: () => ({ query: async () => relayState.events }),
+}));
+vi.mock('@/lib/relayDiscovery', () => ({ refreshDiscoveredRelays: async () => undefined }));
+afterEach(() => { relayState.events = []; });
 
 describe('normalizeIndexUrl', () => {
   it('lowercases host and strips www', () => {
@@ -304,7 +320,7 @@ describe('buildIndexEvent', () => {
     const sk = generateSecretKey();
     const template = (await buildIndexEvent(input))!;
     const signed = finalizeEvent(
-      { ...template, created_at: Math.floor(Date.now() / 1000), pubkey: getPublicKey(sk) },
+      { ...template, created_at: Math.floor(Date.now() / 1000) },
       sk,
     );
     expect(verifyEvent(signed)).toBe(true);
@@ -326,7 +342,6 @@ describe('parseIndexEvent', () => {
         created_at: 1754650000,
         tags: overrides.tags ?? template.tags,
         content: overrides.content ?? template.content,
-        pubkey: getPublicKey(sk),
       },
       sk,
     );
@@ -387,7 +402,7 @@ describe('parseIndexEvent', () => {
       network: 'clearnet',
     }))!;
     const event = finalizeEvent(
-      { ...template, created_at: 1754650000, pubkey: getPublicKey(sk) },
+      { ...template, created_at: 1754650000 },
       sk,
     );
     const obs = parseIndexEvent(event);
@@ -405,7 +420,7 @@ describe('verifyObservation (spec §18 step 2)', () => {
       description: 'Desc',
     }))!;
     const event = finalizeEvent(
-      { ...template, created_at: 1754650000, pubkey: getPublicKey(sk) },
+      { ...template, created_at: 1754650000 },
       sk,
     );
     return parseIndexEvent(event)!;
@@ -442,5 +457,98 @@ describe('observationFromResult', () => {
       source: 'nostr', provider: 'nostr',
     });
     expect(internal).toBeNull();
+  });
+});
+
+describe('index provider integrity before grouping', () => {
+  it('keeps a valid document when a newer author squats its d tag with an invalid URL binding', async () => {
+    const legitimate = (await buildIndexEvent({ url: 'https://example.com/nostr', title: 'Nostr guide' }))!;
+    const poison = (await buildIndexEvent({ url: 'https://attacker.example/nostr', title: 'Nostr guide' }))!;
+    poison.tags = poison.tags.map((tag) => tag[0] === 'd'
+      ? legitimate.tags.find(([name]) => name === 'd')!
+      : tag);
+    relayState.events = [
+      finalizeEvent({ ...legitimate, created_at: 1000 }, generateSecretKey()),
+      finalizeEvent({ ...poison, created_at: 1001 }, generateSecretKey()),
+    ];
+    const response = await webIndexProvider.search({ query: 'nostr' });
+    expect(response.results.map((r) => r.url)).toEqual(['https://example.com/nostr']);
+  });
+
+  it('does not use invalid corroborating observations to raise a valid document score', async () => {
+    const template = (await buildIndexEvent({ url: 'https://example.com/nostr', title: 'Nostr guide' }))!;
+    const valid = finalizeEvent({ ...template, created_at: 1000 }, generateSecretKey());
+    const invalid = finalizeEvent({
+      ...template, created_at: 999,
+      tags: template.tags.map((tag) => tag[0] === 'u' ? ['u', 'https://attacker.example/nostr'] : tag),
+    }, generateSecretKey());
+    relayState.events = [valid];
+    const baseline = await webIndexProvider.search({ query: 'nostr' });
+    relayState.events = [valid, invalid];
+    const response = await webIndexProvider.search({ query: 'nostr' });
+    expect(response.results[0].score).toBe(baseline.results[0].score);
+  });
+});
+
+describe('legacy cache excludes retired keyword placements', () => {
+  const organic: SearchResult = {
+    id: 'organic', title: 'Nostr guide', url: 'https://example.com/nostr',
+    snippet: 'An organic result', source: 'web', provider: 'duckduckgo',
+  };
+  const stake: SearchResult = { ...organic, id: 'stake', provider: 'keyword-stake' };
+
+  function cache(results: SearchResult[], createdAt: number): NostrEvent {
+    return finalizeEvent({
+      kind: 30078, created_at: createdAt,
+      tags: [['query', 'nostr']], content: JSON.stringify(results),
+    }, generateSecretKey());
+  }
+
+  it('keeps organic results while removing retired placements from mixed caches', async () => {
+    relayState.events = [cache([stake, organic], Math.floor(Date.now() / 1000))];
+    const response = await cachedIndexProvider.search({ query: 'nostr' });
+    expect(response.results).toEqual([{ ...organic, score: 79 }]);
+  });
+
+  it('uses an older organic cache when the newest cache contains only retired placements', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    relayState.events = [cache([stake], now), cache([organic], now - 10)];
+    const response = await cachedIndexProvider.search({ query: 'nostr' });
+    expect(response.results).toEqual([{ ...organic, score: 79 }]);
+  });
+
+  it('returns empty results when every cache contains only retired placements', async () => {
+    relayState.events = [cache([stake], Math.floor(Date.now() / 1000))];
+    expect(await cachedIndexProvider.search({ query: 'nostr' })).toEqual({ results: [] });
+  });
+});
+
+describe('Nostra payload validation and community isolation', () => {
+  const rawEvent = (payload: unknown): NostrEvent => finalizeEvent({
+    kind: COMMUNITY_KIND, created_at: 1000,
+    tags: [['d', NOSTRA_D_TAG]],
+    content: `NOSTRA_ENC_V1:RAW:${btoa(JSON.stringify(payload))}`,
+  }, generateSecretKey());
+
+  it.each([
+    null, [], { title: 42, url: 'https://example.com/' },
+    { title: 'Nostr', url: { bad: true } },
+    { title: 'Nostr', url: 'https://example.com/', description: 42 },
+    { title: 'Nostr', url: 'https://example.com/', tags: [42] },
+    { title: 'Nostr', url: 'https://example.com/', type: 'unknown' },
+  ])('rejects malformed public JSON without throwing: %j', async (payload) => {
+    expect(await parseNostraEvent(rawEvent(payload))).toBeNull();
+  });
+
+  it('still displays healthy submissions beside a malformed Nostra payload', async () => {
+    const template = await buildSubmissionEvent({
+      url: 'https://example.com/nostr', title: 'Nostr guide', description: 'Nostr guide', tags: [],
+    });
+    relayState.events = [
+      rawEvent({ title: 42, url: 'https://attacker.example/' }),
+      finalizeEvent({ ...template, created_at: 1000 }, generateSecretKey()),
+    ];
+    const response = await communityProvider.search({ query: 'nostr' });
+    expect(response.results.map((r) => r.url)).toEqual(['https://example.com/nostr']);
   });
 });

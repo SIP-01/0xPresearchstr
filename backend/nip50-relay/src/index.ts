@@ -56,10 +56,22 @@ interface NostrFilter {
   [key: `#${string}`]: string[] | undefined;
 }
 
-type ClientMessage =
-  | ['REQ', string, ...NostrFilter[]]
-  | ['CLOSE', string]
-  | ['EVENT', NostrEvent];
+function isNostrFilter(value: unknown): value is NostrFilter {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const filter = value as Record<string, unknown>;
+  for (const [key, field] of Object.entries(filter)) {
+    if (key === 'search' && (typeof field !== 'string' || field.length > 1000)) return false;
+    if (['since', 'until', 'limit'].includes(key)
+      && (typeof field !== 'number' || !Number.isSafeInteger(field) || field < (key === 'limit' ? 1 : 0))) return false;
+    if (key === 'kinds' && (!Array.isArray(field) || field.length > 100
+      || !field.every((kind: unknown) => typeof kind === 'number' && Number.isSafeInteger(kind) && kind >= 0 && kind <= 65535))) return false;
+    if (key === 'authors' || key === 'ids' || key.startsWith('#')) {
+      if (!Array.isArray(field) || field.length > 100 || !field.every((item: unknown) =>
+        typeof item === 'string' && (key.startsWith('#') ? item.length <= 500 : /^[a-f0-9]{1,64}$/.test(item)))) return false;
+    }
+  }
+  return true;
+}
 
 // ─── Build Meilisearch filter from Nostr filter ───
 function buildMeiliFilter(filter: NostrFilter): string {
@@ -74,7 +86,7 @@ function buildMeiliFilter(filter: NostrFilter): string {
   }
 
   if (filter.authors && filter.authors.length > 0) {
-    const authorList = filter.authors.map(a => `pubkey = "${a}"`).join(' OR ');
+    const authorList = filter.authors.map(a => `pubkey = ${JSON.stringify(a)}`).join(' OR ');
     conditions.push(`(${authorList})`);
   }
 
@@ -88,7 +100,7 @@ function buildMeiliFilter(filter: NostrFilter): string {
 
   // Tag filters: #t, #p, #e, etc.
   if (filter['#t']) {
-    const tagList = filter['#t'].map(t => `tags = "${t}"`).join(' OR ');
+    const tagList = filter['#t'].map(t => `tags = ${JSON.stringify(t)}`).join(' OR ');
     conditions.push(`(${tagList})`);
   }
 
@@ -109,10 +121,9 @@ async function handleReq(
       continue;
     }
 
-    const limit = Math.min(filter.limit || 20, MAX_LIMIT);
-    const meiliFilter = buildMeiliFilter(filter);
-
     try {
+      const limit = Math.min(filter.limit || 20, MAX_LIMIT);
+      const meiliFilter = buildMeiliFilter(filter);
       const results = await searchIndex(filter.search, {
         filter: meiliFilter,
         limit,
@@ -145,15 +156,15 @@ function handleConnection(ws: WebSocket): void {
   const subscriptions = new Set<string>();
 
   ws.on('message', (data: Buffer) => {
-    let msg: ClientMessage;
+    let msg: unknown;
     try {
-      msg = JSON.parse(data.toString()) as ClientMessage;
+      msg = JSON.parse(data.toString());
     } catch {
       ws.send(JSON.stringify(['NOTICE', 'Invalid JSON']));
       return;
     }
 
-    if (!Array.isArray(msg) || msg.length < 2) {
+    if (!Array.isArray(msg) || msg.length < 2 || typeof msg[0] !== 'string') {
       ws.send(JSON.stringify(['NOTICE', 'Invalid message format']));
       return;
     }
@@ -162,8 +173,13 @@ function handleConnection(ws: WebSocket): void {
 
     switch (type) {
       case 'REQ': {
-        const subId = msg[1] as string;
-        const filters = msg.slice(2) as NostrFilter[];
+        const subId: unknown = msg[1];
+        const filters: unknown[] = msg.slice(2);
+        if (typeof subId !== 'string' || !subId || subId.length > 64
+          || filters.length < 1 || filters.length > 5 || !filters.every(isNostrFilter)) {
+          ws.send(JSON.stringify(['NOTICE', 'Invalid subscription or filters']));
+          return;
+        }
 
         if (subscriptions.size >= 10) {
           ws.send(JSON.stringify(['NOTICE', 'Too many subscriptions']));
@@ -171,13 +187,14 @@ function handleConnection(ws: WebSocket): void {
         }
 
         subscriptions.add(subId);
-        void handleReq(ws, subId, filters);
+        void handleReq(ws, subId, filters).catch((err: unknown) => {
+          log.error({ err, subscriptionId: subId }, 'Subscription failed');
+        });
         break;
       }
 
       case 'CLOSE': {
-        const subId = msg[1] as string;
-        subscriptions.delete(subId);
+        if (typeof msg[1] === 'string') subscriptions.delete(msg[1]);
         break;
       }
 
@@ -226,7 +243,7 @@ const server = createServer((req: IncomingMessage, res) => {
   res.end();
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, maxPayload: RELAY_INFO.limitation.max_message_length });
 wss.on('connection', handleConnection);
 
 // ─── Main ───

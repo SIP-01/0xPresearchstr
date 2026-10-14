@@ -27,6 +27,9 @@ export function createOpenAICompatibleProvider(partial: {
   requiresKey?: boolean;
 }): AIProvider {
   const { id, name, defaultEndpoint, requiresKey = true } = partial;
+  const fetchProvider: typeof proxiedFetch = id === 'engine'
+    ? (url, init) => fetch(url, init)
+    : proxiedFetch;
 
   return {
     id,
@@ -41,9 +44,9 @@ export function createOpenAICompatibleProvider(partial: {
 
       let res: Response;
       try {
-        res = await proxiedFetch(`${base}/models`, {
+        res = await fetchProvider(`${base}/models`, {
           headers,
-          signal: signal ?? AbortSignal.timeout(12000),
+          signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(12000)]),
         });
       } catch (err) {
         throw localHint(endpoint, err);
@@ -96,11 +99,11 @@ export function createOpenAICompatibleProvider(partial: {
       };
 
       const callApi = () =>
-        proxiedFetch(`${base}/chat/completions`, {
+        fetchProvider(`${base}/chat/completions`, {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
-          signal: req.signal ?? AbortSignal.timeout(45000),
+          signal: AbortSignal.any([...(req.signal ? [req.signal] : []), AbortSignal.timeout(45000)]),
         }, 45000);
 
       let res: Response | null = null;

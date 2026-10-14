@@ -35,16 +35,24 @@ if (!existsSync(REPORTS_DIR)) {
 // ─── Helper: parse JSON body ───
 async function parseBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    let body = '';
+    let chunks: Buffer[] = [];
+    let bytes = 0;
+    let tooLarge = false;
     req.on('data', (chunk: Buffer) => {
-      body += chunk.toString();
-      if (body.length > 1_000_000) {
+      if (tooLarge) return;
+      bytes += chunk.length;
+      if (bytes > 1_000_000) {
+        tooLarge = true;
+        chunks = [];
         reject(new Error('Body too large'));
+        return;
       }
+      chunks.push(chunk);
     });
     req.on('end', () => {
+      if (tooLarge) return;
       try {
-        resolve(JSON.parse(body));
+        resolve(JSON.parse(Buffer.concat(chunks, bytes).toString('utf8')));
       } catch {
         reject(new Error('Invalid JSON'));
       }
@@ -168,10 +176,6 @@ async function handleReviewReport(req: IncomingMessage, res: ServerResponse, rep
     return;
   }
 
-  report.status = newStatus;
-  report.reviewedAt = Math.floor(Date.now() / 1000);
-  report.reviewNote = reviewNote;
-
   // If status is "removed", remove the document from the search index.
   if (newStatus === 'removed') {
     try {
@@ -182,9 +186,14 @@ async function handleReviewReport(req: IncomingMessage, res: ServerResponse, rep
       log.info({ reportId, docId }, 'Document removed from index');
     } catch (err) {
       log.error({ err, reportId }, 'Failed to remove document from index');
+      sendJson(res, 503, { error: 'Removal failed. The report is unchanged; try again.' });
+      return;
     }
   }
 
+  report.status = newStatus;
+  report.reviewedAt = Math.floor(Date.now() / 1000);
+  report.reviewNote = reviewNote;
   saveReport(report);
   log.info({ reportId, status: newStatus }, 'Report reviewed');
 
