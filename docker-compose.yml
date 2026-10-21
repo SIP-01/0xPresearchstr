@@ -16,6 +16,10 @@
 #   cp .env.example .env   # Edit with your config
 #   docker compose up -d
 #
+# SECURITY: MEILI_API_KEY and ABUSE_ADMIN_TOKEN are REQUIRED — the stack
+# refuses to start without them. Generate strong values:
+#   openssl rand -hex 32
+#
 # To run without Tor/I2P crawling:
 #   docker compose up -d meilisearch nostr-crawler nip50-relay abuse-api frontend
 #
@@ -28,9 +32,11 @@ services:
     container_name: 0xpresearchstr-meilisearch
     restart: unless-stopped
     ports:
-      - "7700:7700"
+      # Localhost-only: the Meilisearch admin API must not be exposed
+      # to the network. Only the in-stack services need port 7700.
+      - "127.0.0.1:7700:7700"
     environment:
-      MEILI_MASTER_KEY: ${MEILI_API_KEY:-change-me}
+      MEILI_MASTER_KEY: ${MEILI_API_KEY:?MEILI_API_KEY must be set (see .env.example)}
       MEILI_ENV: production
       MEILI_MAX_INDEXING_MEMORY: 1GiB
       MEILI_LOG_LEVEL: WARN
@@ -56,7 +62,7 @@ services:
         condition: service_healthy
     environment:
       MEILI_HOST: http://meilisearch:7700
-      MEILI_API_KEY: ${MEILI_API_KEY:-change-me}
+      MEILI_API_KEY: ${MEILI_API_KEY:?MEILI_API_KEY must be set (see .env.example)}
       MEILI_INDEX: ${MEILI_INDEX:-0xsearchstr}
       NOSTR_RELAYS: ${NOSTR_RELAYS:-}
       NOSTR_BATCH_SIZE: ${NOSTR_BATCH_SIZE:-50}
@@ -80,7 +86,7 @@ services:
         condition: service_healthy
     environment:
       MEILI_HOST: http://meilisearch:7700
-      MEILI_API_KEY: ${MEILI_API_KEY:-change-me}
+      MEILI_API_KEY: ${MEILI_API_KEY:?MEILI_API_KEY must be set (see .env.example)}
       MEILI_INDEX: ${MEILI_INDEX:-0xsearchstr}
       CRAWLER_USER_AGENT: ${CRAWLER_USER_AGENT:-0xPresearchstr/0.1}
       CLEARNET_CONCURRENCY: ${CLEARNET_CONCURRENCY:-5}
@@ -136,7 +142,7 @@ services:
         condition: service_started
     environment:
       MEILI_HOST: http://meilisearch:7700
-      MEILI_API_KEY: ${MEILI_API_KEY:-change-me}
+      MEILI_API_KEY: ${MEILI_API_KEY:?MEILI_API_KEY must be set (see .env.example)}
       MEILI_INDEX: ${MEILI_INDEX:-0xsearchstr}
       TOR_SOCKS_PROXY: socks5h://tor-proxy:9050
       I2P_HTTP_PROXY: http://i2pd:4444
@@ -169,7 +175,7 @@ services:
       - "7777:7777"
     environment:
       MEILI_HOST: http://meilisearch:7700
-      MEILI_API_KEY: ${MEILI_API_KEY:-change-me}
+      MEILI_API_KEY: ${MEILI_API_KEY:?MEILI_API_KEY must be set (see .env.example)}
       MEILI_INDEX: ${MEILI_INDEX:-0xsearchstr}
       NIP50_PORT: "7777"
       NIP50_HOST: "0.0.0.0"
@@ -193,11 +199,12 @@ services:
       - "8080:8080"
     environment:
       MEILI_HOST: http://meilisearch:7700
-      MEILI_API_KEY: ${MEILI_API_KEY:-change-me}
+      MEILI_API_KEY: ${MEILI_API_KEY:?MEILI_API_KEY must be set (see .env.example)}
       MEILI_INDEX: ${MEILI_INDEX:-0xsearchstr}
       ABUSE_API_PORT: "8080"
       ABUSE_API_HOST: "0.0.0.0"
-      ABUSE_ADMIN_TOKEN: ${ABUSE_ADMIN_TOKEN:-change-me}
+      ABUSE_ADMIN_TOKEN: ${ABUSE_ADMIN_TOKEN:?ABUSE_ADMIN_TOKEN must be set (see .env.example)}
+      ABUSE_CORS_ORIGINS: ${ABUSE_CORS_ORIGINS:-}
       REPORTS_DIR: /app/data/reports
       LOG_LEVEL: ${LOG_LEVEL:-info}
       NODE_ENV: production
