@@ -73,6 +73,22 @@ function isNostrFilter(value: unknown): value is NostrFilter {
   return true;
 }
 
+/**
+ * NIP-01 (#2504/#2511): an empty list in a filter matches NOTHING, and
+ * clients must not send empty lists. Detect any empty list field
+ * (`ids`, `authors`, `kinds`, `#<tag>`) so the subscription can be closed
+ * instead of silently matching every document — `buildMeiliFilter` skips
+ * empty fields, which would otherwise turn `{"kinds": []}` into a
+ * match-everything query.
+ */
+function hasEmptyListField(filter: NostrFilter): boolean {
+  for (const [key, field] of Object.entries(filter)) {
+    if ((key === 'ids' || key === 'authors' || key === 'kinds' || key.startsWith('#'))
+      && Array.isArray(field) && field.length === 0) return true;
+  }
+  return false;
+}
+
 // ─── Build Meilisearch filter from Nostr filter ───
 function buildMeiliFilter(filter: NostrFilter): string {
   const conditions: string[] = [];
@@ -98,8 +114,9 @@ function buildMeiliFilter(filter: NostrFilter): string {
     conditions.push(`timestamp <= ${filter.until}`);
   }
 
-  // Tag filters: #t, #p, #e, etc.
-  if (filter['#t']) {
+  // Tag filters: #t, #p, #e, etc. Guard on length: an empty array is truthy
+  // in JS and would otherwise emit an empty `()` clause.
+  if (filter['#t'] && filter['#t'].length > 0) {
     const tagList = filter['#t'].map(t => `tags = ${JSON.stringify(t)}`).join(' OR ');
     conditions.push(`(${tagList})`);
   }
@@ -178,6 +195,13 @@ function handleConnection(ws: WebSocket): void {
         if (typeof subId !== 'string' || !subId || subId.length > 64
           || filters.length < 1 || filters.length > 5 || !filters.every(isNostrFilter)) {
           ws.send(JSON.stringify(['NOTICE', 'Invalid subscription or filters']));
+          return;
+        }
+
+        if (filters.some(hasEmptyListField)) {
+          // NIP-01 (#2504/#2511): empty lists match nothing. Close the
+          // subscription instead of running a match-everything query.
+          ws.send(JSON.stringify(['CLOSED', subId, 'error: empty filter lists match nothing per NIP-01 — do not send empty lists']));
           return;
         }
 
