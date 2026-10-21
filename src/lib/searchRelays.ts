@@ -19,6 +19,26 @@ export function getSearchRelay(url: string): NRelay1 {
 }
 
 /**
+ * NIP-01 (#2504/#2511): empty lists in a filter match nothing and clients
+ * must not send them. Strip empty list fields (`ids`, `authors`, `kinds`,
+ * `#<tag>`) at the single outbound choke point so this client never emits
+ * them — a relay implementing the old behavior would treat `{"kinds": []}`
+ * as match-everything, and a conformant relay would match nothing.
+ */
+function sanitizeFilters(filters: NostrFilter[]): NostrFilter[] {
+  return filters.map((filter) => {
+    const clean: NostrFilter = { ...filter };
+    for (const key of Object.keys(clean)) {
+      const value = (clean as Record<string, unknown>)[key];
+      if (Array.isArray(value) && value.length === 0) {
+        delete (clean as Record<string, unknown>)[key];
+      }
+    }
+    return clean;
+  });
+}
+
+/**
  * Query many relays in parallel, absorbing per-relay failure of ANY kind.
  *
  * The async map callback + try/catch is load-bearing: constructing a
@@ -37,11 +57,12 @@ export async function queryRelayPool(
     ...(opts.signal ? [opts.signal] : []),
     AbortSignal.timeout(opts.timeoutMs ?? 8000),
   ]);
+  const outbound = sanitizeFilters(filters);
 
   const settled = await Promise.allSettled(
     urls.map(async (url) => {
       try {
-        return await getSearchRelay(url).query(filters, { signal });
+        return await getSearchRelay(url).query(outbound, { signal });
       } catch {
         return [] as NostrEvent[]; // dead/blocked relay = empty contribution
       }
