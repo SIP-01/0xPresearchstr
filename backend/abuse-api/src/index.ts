@@ -10,6 +10,15 @@
  *
  * Reports are stored as JSON files in a volume-mounted directory.
  * In production, replace with a proper database (SQLite/PostgreSQL).
+ *
+ * Security notes:
+ * - Admin endpoints fail closed: if ABUSE_ADMIN_TOKEN is empty/unset,
+ *   isAdmin() always returns false and admin endpoints are disabled.
+ * - Admin endpoints never send `Access-Control-Allow-Origin: *`. They only
+ *   reflect origins listed in ABUSE_CORS_ORIGINS (comma-separated). If the
+ *   allowlist is empty, no CORS header is sent on admin responses at all.
+ *   Public endpoints (search, report submission, health) keep `*` since
+ *   they carry no credentials.
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -26,6 +35,13 @@ const PORT = parseInt(process.env.ABUSE_API_PORT || '8080', 10);
 const HOST = process.env.ABUSE_API_HOST || '0.0.0.0';
 const ADMIN_TOKEN = process.env.ABUSE_ADMIN_TOKEN || '';
 const REPORTS_DIR = process.env.REPORTS_DIR || './data/reports';
+
+// Allowlist of origins permitted to call the admin endpoints cross-origin.
+// Empty (default) = no cross-origin admin access is allowed.
+const ADMIN_CORS_ORIGINS = (process.env.ABUSE_CORS_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
 
 // Ensure reports directory exists.
 if (!existsSync(REPORTS_DIR)) {
@@ -62,17 +78,36 @@ async function parseBody(req: IncomingMessage): Promise<unknown> {
 }
 
 // ─── Helper: send JSON response ───
-function sendJson(res: ServerResponse, status: number, data: unknown): void {
-  res.writeHead(status, {
+// Admin responses only include CORS headers when the request origin is in
+// the ABUSE_CORS_ORIGINS allowlist; otherwise no ACAO header is sent.
+// Public responses keep `Access-Control-Allow-Origin: *` (no credentials).
+function sendJson(
+  res: ServerResponse,
+  status: number,
+  data: unknown,
+  opts?: { admin?: boolean; origin?: string },
+): void {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  });
+  };
+  if (opts?.admin) {
+    if (opts.origin && ADMIN_CORS_ORIGINS.includes(opts.origin)) {
+      headers['Access-Control-Allow-Origin'] = opts.origin;
+      headers['Vary'] = 'Origin';
+      headers['Access-Control-Allow-Methods'] = 'GET, PATCH, OPTIONS';
+      headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
+    }
+  } else {
+    headers['Access-Control-Allow-Origin'] = '*';
+    headers['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, OPTIONS';
+    headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
+  }
+  res.writeHead(status, headers);
   res.end(JSON.stringify(data));
 }
 
 // ─── Helper: check admin auth ───
+// Fails closed: an empty/unset token disables admin endpoints entirely.
 function isAdmin(req: IncomingMessage): boolean {
   if (!ADMIN_TOKEN) {
     log.warn('ABUSE_ADMIN_TOKEN not set — admin endpoints are disabled');
@@ -142,8 +177,9 @@ async function handleSubmitReport(req: IncomingMessage, res: ServerResponse): Pr
 
 /** GET /api/reports — List reports (admin only). */
 function handleListReports(req: IncomingMessage, res: ServerResponse): void {
+  const cors = { admin: true, origin: req.headers.origin };
   if (!isAdmin(req)) {
-    sendJson(res, 401, { error: 'Unauthorized' });
+    sendJson(res, 401, { error: 'Unauthorized' }, cors);
     return;
   }
 
@@ -151,19 +187,20 @@ function handleListReports(req: IncomingMessage, res: ServerResponse): void {
   const statusFilter = url.searchParams.get('status') || undefined;
   const reports = listReports(statusFilter);
 
-  sendJson(res, 200, { reports, total: reports.length });
+  sendJson(res, 200, { reports, total: reports.length }, cors);
 }
 
 /** PATCH /api/reports/:id — Review a report (admin only). */
 async function handleReviewReport(req: IncomingMessage, res: ServerResponse, reportId: string): Promise<void> {
+  const cors = { admin: true, origin: req.headers.origin };
   if (!isAdmin(req)) {
-    sendJson(res, 401, { error: 'Unauthorized' });
+    sendJson(res, 401, { error: 'Unauthorized' }, cors);
     return;
   }
 
   const report = loadReport(reportId);
   if (!report) {
-    sendJson(res, 404, { error: 'Report not found' });
+    sendJson(res, 404, { error: 'Report not found' }, cors);
     return;
   }
 
@@ -172,7 +209,7 @@ async function handleReviewReport(req: IncomingMessage, res: ServerResponse, rep
   const reviewNote = body.reviewNote as string;
 
   if (!newStatus || !['reviewed', 'removed', 'dismissed'].includes(newStatus)) {
-    sendJson(res, 400, { error: 'Invalid status. Must be: reviewed, removed, dismissed' });
+    sendJson(res, 400, { error: 'Invalid status. Must be: reviewed, removed, dismissed' }, cors);
     return;
   }
 
@@ -186,7 +223,7 @@ async function handleReviewReport(req: IncomingMessage, res: ServerResponse, rep
       log.info({ reportId, docId }, 'Document removed from index');
     } catch (err) {
       log.error({ err, reportId }, 'Failed to remove document from index');
-      sendJson(res, 503, { error: 'Removal failed. The report is unchanged; try again.' });
+      sendJson(res, 503, { error: 'Removal failed. The report is unchanged; try again.' }, cors);
       return;
     }
   }
@@ -197,7 +234,7 @@ async function handleReviewReport(req: IncomingMessage, res: ServerResponse, rep
   saveReport(report);
   log.info({ reportId, status: newStatus }, 'Report reviewed');
 
-  sendJson(res, 200, { report });
+  sendJson(res, 200, { report }, cors);
 }
 
 /** GET /api/search — REST search endpoint for the frontend. */
@@ -244,8 +281,25 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   const method = req.method || 'GET';
   const urlPath = req.url?.split('?')[0] || '/';
 
-  // CORS preflight.
+  // CORS preflight. Admin paths only get CORS headers for allowlisted
+  // origins; otherwise the preflight succeeds but grants no CORS access.
   if (method === 'OPTIONS') {
+    const isAdminPath = urlPath === '/api/reports' || /^\/api\/reports\/[a-f0-9-]+$/.test(urlPath);
+    const origin = req.headers.origin;
+    if (isAdminPath) {
+      if (origin && ADMIN_CORS_ORIGINS.includes(origin)) {
+        res.writeHead(204, {
+          'Access-Control-Allow-Origin': origin,
+          'Vary': 'Origin',
+          'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        });
+      } else {
+        res.writeHead(204);
+      }
+      res.end();
+      return;
+    }
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
@@ -304,4 +358,10 @@ server.listen(PORT, HOST, () => {
   log.info(`  GET  /api/search?q=... — Search the index`);
   log.info(`  GET  /api/reports      — List reports (admin)`);
   log.info(`  PATCH /api/reports/:id — Review report (admin)`);
+  if (!ADMIN_TOKEN) {
+    log.warn('ABUSE_ADMIN_TOKEN not set — admin endpoints are DISABLED (fail-closed)');
+  }
+  if (ADMIN_CORS_ORIGINS.length === 0) {
+    log.info('ABUSE_CORS_ORIGINS not set — no cross-origin access to admin endpoints');
+  }
 });
