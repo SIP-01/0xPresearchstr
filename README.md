@@ -4,8 +4,6 @@
 
 Presearchstr is the **community fork of [0xSearchstr](https://github.com/NostrDanish/0xSearchstr.git)**, inspired by [Presearch](https://presearch.com): a shared Nostr search index with keyword advertising managed through [Precommunity](https://precommunity.org/keyword-market).
 
-[![Edit with Shakespeare](https://shakespeare.diy/badge.svg)](https://shakespeare.diy/clone?url=https%3A%2F%2Fgithub.com%2FNostrDanish%2F0xPresearchstr.git)
-
 ---
 
 ## One Index, Many Frontends (Federation)
@@ -711,4 +709,4 @@ MIT
 
 ---
 
-*Vibed with [Shakespeare](https://shakespeare.diy)* · *AI powered by [PPQ.ai](https://ppq.ai/invite/949880ca) (supports the project)*
+*AI powered by [PPQ.ai](https://ppq.ai/invite/949880ca) (supports the project)*

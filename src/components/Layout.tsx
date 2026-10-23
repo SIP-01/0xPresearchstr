@@ -131,14 +131,6 @@ export function Layout({ children, minimal = false }: LayoutProps) {
             <Link to="/explore" className="hover:text-foreground transition-colors">Explore</Link>
             <Link to="/policy" className="hover:text-foreground transition-colors">Content Policy</Link>
             <Link to="/about" className="hover:text-foreground transition-colors">About</Link>
-            <a
-              href="https://shakespeare.diy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-foreground transition-colors"
-            >
-              Vibed with Shakespeare
-            </a>
           </div>
         </div>
       </footer>
