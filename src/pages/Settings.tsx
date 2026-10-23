@@ -17,6 +17,7 @@ import {
   Languages, X,
 } from 'lucide-react';
 
+import { BasePayoutWalletCard } from '@/components/BasePayoutWalletCard';
 import { KeywordStakingSettings } from '@/components/KeywordStakingSettings';
 import { Layout } from '@/components/Layout';
 import { RelayListManager } from '@/components/RelayListManager';
@@ -2135,7 +2136,7 @@ export default function Settings() {
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         </div>
         <p className="text-muted-foreground mb-6">
-          Everything is stored locally in your browser. Nothing leaves your device except search queries.
+          Appearance and engine choices stay in this browser. Search queries go to the engines you enable. A Base payout address is published on your Nostr account.
         </p>
 
         <Tabs defaultValue="general">
@@ -2161,6 +2162,7 @@ export default function Settings() {
             <PrivacySection />
             <Separator className="mb-10" />
             <KeywordStakingSettings />
+            <BasePayoutWalletCard />
           </TabsContent>
 
           {/* Engine toggles */}
