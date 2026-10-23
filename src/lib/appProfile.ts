@@ -46,6 +46,9 @@ export const APP_PROFILE = {
     adminRolesDTag: 'presearchstr:admin-roles',
     modRolesDTag: 'presearchstr:mod-roles',
     rolesTTag: 'presearchstr-roles',
+    /** Owner/admin keyword-staking switch (kind 30078). Content is "on" or "off". */
+    keywordStakingDTag: 'presearchstr:keyword-staking',
+    settingsTTag: 'presearchstr-settings',
   },
 
   /**

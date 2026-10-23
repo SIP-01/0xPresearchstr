@@ -34,8 +34,8 @@ export interface AppConfig {
   useAppBlossomServers: boolean;
   /**
    * Privacy Mode — organic search uses Nostr-tier providers and AI stays off.
-   * PRE community advertising is an exception: eligible Web/All text queries
-   * still go through the backend to PRE community.
+   * Keyword staking is an exception while an admin leaves it on: eligible
+   * Web/All text queries still go through the backend to PRE community.
    */
   privacyMode: boolean;
   /**
@@ -56,6 +56,12 @@ export interface AppConfig {
    * signed with the logged-in Nostr key (attributable, like keyword stakes).
    */
   voteWithIdentity: boolean;
+  /**
+   * Npub staking — the Nostr keyword-stake archive. Off by default, so
+   * staker npubs stay hidden until this visitor turns the archive on.
+   * Keyword staking (the PRE placement) is not this flag.
+   */
+  npubStaking: boolean;
   /** Search engines (provider ids) the user has turned off in Settings. */
   disabledProviders: string[];
   /**

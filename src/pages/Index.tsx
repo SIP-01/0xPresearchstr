@@ -24,6 +24,7 @@ import { useAIAnswer } from '@/hooks/useAIAnswer';
 import { useSearchHotkeys } from '@/hooks/useSearchHotkeys';
 import { useAppContext } from '@/hooks/useAppContext';
 import { usePrecommunityAd, isPrecommunityQueryEligible } from '@/hooks/usePrecommunityAd';
+import { useKeywordStaking } from '@/hooks/useKeywordStaking';
 import { ALL_SOURCE_TABS } from '@/lib/sourceTabs';
 import { PRECOMMUNITY_MARKET_URL } from '@/lib/precommunity';
 import type { SearchSource } from '@/lib/providers/types';
@@ -37,6 +38,7 @@ const PAGE_SIZE = 10;
 
 const Index = () => {
   const { config } = useAppContext();
+  const { enabled: keywordStakingOn } = useKeywordStaking();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
   // URL param wins; otherwise the user's configured default tab (Web out of
@@ -113,7 +115,9 @@ const Index = () => {
   }, [results, source]);
 
   const organicResults = filteredResults;
-  const adQueryEligible = (source === 'web' || source === 'all') && isPrecommunityQueryEligible(activeQuery);
+  const adQueryEligible = keywordStakingOn
+    && (source === 'web' || source === 'all')
+    && isPrecommunityQueryEligible(activeQuery);
   const adsEnabled = hasSearched && adQueryEligible;
   const adQuery = usePrecommunityAd(activeQuery, adsEnabled);
 
@@ -154,7 +158,7 @@ const Index = () => {
 
   useSeoMeta({
     title: hasSearched ? `${activeQuery} - Presearchstr` : 'Presearchstr - Decentralized Search Aggregator',
-    description: 'Search Nostr and the web, enriched by a shared community index and sponsored keyword ads from Precommunity.',
+    description: 'Search Nostr and the web, enriched by a shared community index and keyword staking from Precommunity.',
   });
 
   const handleSubmit = useCallback((value: string) => {
@@ -223,7 +227,7 @@ const Index = () => {
           <div className="mt-6 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:delay-500">
             <PrivacyIndicator
               source={providerSource as SearchSource | 'all'}
-              precommunityEligible={(source === 'web' || source === 'all') && isPrecommunityQueryEligible(query)}
+              precommunityEligible={keywordStakingOn && (source === 'web' || source === 'all') && isPrecommunityQueryEligible(query)}
             />
           </div>
 
@@ -240,7 +244,7 @@ const Index = () => {
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground/70 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:delay-1000">
             <span className="inline-flex items-center gap-1.5">
               <Gem className="w-3 h-3 text-primary/70" />
-              Keyword advertising with Precommunity
+              Keyword staking
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Search className="w-3 h-3 text-primary/70" />
@@ -283,7 +287,7 @@ const Index = () => {
           {privacyMode && (suppressedProviders.length > 0 || adsEnabled) && source !== 'i2p' && (
             <p className="text-xs text-muted-foreground max-w-2xl">
               Privacy Mode — Nostr organic search; AI off.
-              {adsEnabled && ' PRE community privacy ads use only your query.'}
+              {adsEnabled && ' Keyword staking uses only your query.'}
             </p>
           )}
         </div>

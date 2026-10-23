@@ -9,12 +9,13 @@ This engine's identity is explicit and centralized in
 |---|---|---|
 | SIP-01 observations (kind 39697) | `widx:*` (SIP-01 spec) | **Protocol data — shared with every SIP-01 client** |
 | Legacy query cache (kind 30078) | `0xsearchstr:cache:*` | Fork-family federation (frozen, read-only here) |
-| Keyword stakes (kind 30078) | `0xsearchstr:stake:*` | Historical fork-family data — read by Explore and admin statistics; search placement retired |
+| Npub staking (kind 30078) | `0xsearchstr:stake:*` | Historical fork-family data — Explore shows it only when the visitor turns npub staking on; search placement retired |
 | Community submissions (kind 30078) | `0xsearchstr:submit:*` | Fork-family federation |
 | Term signals (kind 30078) | `0xsearchstr:term:*` / `0xsearchstr:term-reveal:*` | Fork-family federation (hashed k-anonymity) |
 | **Moderation labels** (NIP-32, kind 1985) | `presearchstr.moderation` | **This engine only** — trusted authors are this app's owner + role lists |
 | **Abuse inbox** (NIP-56, kind 1984) | `presearchstr.abuse` | **This engine only** |
 | **Role lists** (kind 30078) | `presearchstr:admin-roles` / `presearchstr:mod-roles` | **This engine only** |
+| **Keyword staking switch** (kind 30078) | `presearchstr:keyword-staking` | **This engine only** — owner or admin publishes `on` / `off`; missing event means on |
 | Local settings (localStorage) | `presearchstr:*` | This engine only (per-origin anyway) |
 
 Legacy control namespaces `0xsearchstr.moderation` / `0xsearchstr.abuse`
@@ -264,17 +265,46 @@ plaintext (its user just typed it) and publishes:
 
 ---
 
-## Keyword Stakes (kind 30078) — historical archive
+## Keyword staking switch (kind 30078)
 
-This preserved schema describes the former Nostr-native keyword staking feature:
-an addressable event bound a normalized keyword to a URL, signed by the staker's
-identity. Presearchstr no longer publishes stakes or uses them for search placement.
-Existing events remain readable in the Explore archive and administrator statistics.
+Keyword staking is the PRE search placement. It is not a search-result event.
+The only Nostr event is the platform switch, so every client agrees whether
+the placement is shown. It is **on** when no valid event exists.
 
-Current sponsored placements come from Precommunity's server-side resolve API,
-outside the Nostr search pipeline. They do not introduce a Nostr kind, tags, schema,
-or migration, and are never published as index events. Historical stake data and
-the event format below remain unchanged for compatible readers.
+Readers trust the latest event signed by the owner or a pubkey on the
+owner-signed admin list. Anyone else's event is ignored. Content is exactly
+`on` or `off`.
+
+```json
+{
+  "kind": 30078,
+  "pubkey": "<owner or admin pubkey>",
+  "content": "on",
+  "tags": [
+    ["d", "presearchstr:keyword-staking"],
+    ["t", "presearchstr-settings"],
+    ["alt", "Presearchstr keyword staking platform setting"]
+  ]
+}
+```
+
+```json
+{ "kinds": [30078], "authors": ["<owner>", "<admin>"], "#d": ["presearchstr:keyword-staking"], "limit": 20 }
+```
+
+## Npub staking (kind 30078) — historical archive
+
+This preserved schema describes the former Nostr-native keyword staking feature,
+called **npub staking** in the product. An addressable event bound a normalized
+keyword to a URL, signed by the staker's identity. Presearchstr no longer publishes
+stakes or uses them for search placement. Explore hides the archive, including
+staker npubs, until the visitor turns **Npub staking** on in Settings. Administrator
+statistics still count the events.
+
+Keyword staking placements come from Precommunity's server-side resolve API,
+outside the Nostr search pipeline. The placement itself is not an index event.
+The on/off switch documented above is the only Nostr event for it. Historical
+npub-staking data and the event format below remain unchanged for compatible readers.
 
 ### Event Structure
 

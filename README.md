@@ -1,8 +1,8 @@
 # Presearchstr
 
-**The community-driven search engine.** Nostr first, web when needed, with Precommunity keyword ads. Organic search works without a configured backend.
+**The community-driven search engine.** Nostr first, web when needed, with keyword staking. Organic search works without a configured backend.
 
-Presearchstr is the **community fork of [0xSearchstr](https://github.com/NostrDanish/0xSearchstr.git)**, inspired by [Presearch](https://presearch.com): a shared Nostr search index with keyword advertising managed through [Precommunity](https://precommunity.org/keyword-market).
+Presearchstr is the **community fork of [0xSearchstr](https://github.com/NostrDanish/0xSearchstr.git)**, inspired by [Presearch](https://presearch.com): a shared Nostr search index with keyword staking managed through [Precommunity](https://precommunity.org/keyword-market).
 
 [![Edit with Shakespeare](https://shakespeare.diy/badge.svg)](https://shakespeare.diy/clone?url=https%3A%2F%2Fgithub.com%2FNostrDanish%2F0xPresearchstr.git)
 
@@ -150,37 +150,45 @@ re-hash the plaintext and compare). Rare queries do not appear as plaintext tren
 events, and sensitive query classes (NIP-19 ids, NIP-05 addresses, URLs,
 math) are never signaled at all. See [NIP.md](NIP.md).
 
-### PRE community Privacy Ads
+### Keyword staking
 
-PRE community, the community around the PRE token, resolves blockchain keyword
-ad data through our backend using only the search query. Submitted text searches can display one
-**Sponsored · PRE community** card in **Web**
-and **All**, below any instant or AI answers and above organic results. Keyword
-advertising is managed at [Precommunity Keyword Market](https://precommunity.org/keyword-market).
+PRE community, the community around the PRE token, resolves keyword staking
+through our backend using only the search query. Submitted text searches can display one
+**Keyword staking** card in **Web**
+and **All**, below any instant or AI answers and above organic results. Stakes
+are managed at [Precommunity Keyword Market](https://precommunity.org/keyword-market).
+
+Keyword staking is on for everyone. The switch in Settings is locked for regular
+visitors. An owner or admin can publish the kind 30078 setting
+`presearchstr:keyword-staking` (`on` or `off`) to change it for the whole site.
+If that event is missing, the placement stays on. Npub staking — historical Nostr
+keyword stakes — is a separate archive, off by default in Settings, and it does
+not change search results.
 
 The browser calls `GET /api/ads/precommunity?q=…` on the engine backend. The worker
 calls Precommunity's resolve API with a server-only `KEYWORD_MARKET_API_KEY` and
 returns `{ ad: PrecommunityAd | null }`. An ad has `headline`, `description`, `url`,
 `clickUrl`, and `reportUrl` fields. When a lookup completes with `ad: null` or an
-error, the card instead shows **Your ad could be here**, inviting website promotion
-for the submitted query with an **Advertise on PRE community** link to the Keyword
+error, the card instead shows **Keyword staking**, inviting a stake
+for the submitted query with a **Stake this keyword** link to the Keyword
 Marketplace. This invitation does not assert that the keyword is available and
-does not block organic search.
+does not block organic search. Visitors cannot hide it.
 
 - Ads are independent of result counts, ranking, votes, Nostr indexing, and AI evidence.
 - Pagination and switching between Web and All retain the same ad for the submitted query.
-- PRE community advertising is an explicit Privacy Mode exception: eligible submitted
+- Keyword staking is an explicit Privacy Mode exception: eligible submitted
   text searches in Web and All still resolve ads and show ads or marketplace invitations.
   Organic search uses Nostr-tier providers only and AI answers remain disabled in this mode.
   The invitation stays hidden during the initial lookup, on other tabs, and for
   special query classes (NIP-19, NIP-05, URLs, and math), which do not resolve ads.
 - Ad clicks open `clickUrl` in a new tab; reports open `reportUrl`. All links require
   HTTPS, and click/report links are restricted to `precommunity.org`.
-- Historical Nostr keyword stakes remain in **Explore → Keyword Stakes Archive** and
-  admin statistics. They no longer receive search placement; their schema and existing
+- Historical Nostr stakes are **npub staking**. Explore hides them, including staker
+  npubs, until the visitor turns **Npub staking** on in Settings. Admin statistics
+  still count them. They do not receive search placement; their schema and existing
   events are preserved in [NIP.md](NIP.md).
 
-**Privacy:** eligible Web/All text queries still resolve ads in Privacy Mode.
+**Privacy:** eligible Web/All text queries still resolve keyword staking in Privacy Mode, unless an admin has turned it off.
 Our backend can observe the query and browser IP; its API request to PRE community
 forwards only search text, without the Nostr account, browser cookies, or user IP headers.
 Ad/report links connect the browser directly to PRE community; ad clicks are counted.

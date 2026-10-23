@@ -1,5 +1,5 @@
 /**
- * Recent keyword stakes — browsable view of community-staked keywords.
+ * Npub staking — browsable view of Nostr keyword stakes signed by npubs.
  *
  * Reads the most recent kind 30078 stake events (t-tag "0xsearchstr-stake")
  * across the search + index relays. Stakes are public UGC (no author filter);
@@ -47,9 +47,10 @@ function parseEntry(event: NostrEvent): StakeEntry | null {
   };
 }
 
-export function useRecentStakes(limit = 50) {
+export function useRecentStakes(limit = 50, enabled = true) {
   return useQuery({
     queryKey: ['recent-stakes', limit],
+    enabled,
     queryFn: async ({ signal }) => {
       const filter: NostrFilter = {
         kinds: [STAKE_KIND],

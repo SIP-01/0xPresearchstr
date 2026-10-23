@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 export default function About() {
   useSeoMeta({
     title: 'About - Presearchstr',
-    description: 'Learn about Presearchstr — the community-driven, Nostr-native fork of 0xSearchstr with Precommunity keyword ads. Nostr-first, with SearXNG, Wikipedia, Hacker News, and Tor fallback.',
+    description: 'Learn about Presearchstr — the community-driven, Nostr-native fork of 0xSearchstr with keyword staking. Nostr-first, with SearXNG, Wikipedia, Hacker News, and Tor fallback.',
   });
 
   return (
@@ -72,28 +72,30 @@ export default function About() {
         </Card>
 
         {/* Keyword advertising */}
-        <h2 className="text-xl font-semibold mb-4">PRE community Privacy Ads</h2>
+        <h2 className="text-xl font-semibold mb-4">Keyword staking</h2>
         <Card className="mb-8 border-primary/20">
           <CardContent className="py-6">
             <div className="flex items-start gap-3 mb-4">
               <Gem className="w-5 h-5 text-primary shrink-0 mt-0.5" />
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Privacy ads through{' '}
+                Keyword staking through{' '}
                 <a href="https://precommunity.org/keyword-market" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">PRE community</a>{' '}
-                use only your search query to resolve blockchain keyword ad data from the community around the PRE token.
+                uses only your search query to resolve a PRE keyword stake.
                 A submitted text search can show one clearly marked{' '}
-                <strong className="text-foreground">Sponsored · PRE community</strong> card in Web and All,
+                <strong className="text-foreground">Keyword staking</strong> card in Web and All,
                 below any instant or AI answers and above organic results.
+                It stays on unless an admin turns it off. Npub staking, the Nostr archive, stays hidden until you enable it in Settings.
               </p>
             </div>
             <ul className="space-y-2 text-sm text-muted-foreground">
               {[
-                'The engine backend resolves ads with a server-only API key',
-                'Ads are separate from organic ranking, result counts, votes, indexing, and AI evidence',
-                'A completed lookup without an ad shows “Your ad could be here” with a link to the Keyword Marketplace, without promising keyword availability',
-                'PRE community ads and marketplace invitations remain active in Privacy Mode for eligible submitted text searches in Web and All',
-                'NIP-19 identifiers, NIP-05 addresses, URLs, and math are excluded from ad requests',
-                'Older Nostr keyword stakes remain visible in the Explore archive, without search placement',
+                'The engine backend resolves keyword staking with a server-only API key',
+                'Keyword staking is separate from organic ranking, result counts, votes, indexing, and AI evidence',
+                'A completed lookup without a stake shows a Keyword Marketplace invitation, without promising the word is available',
+                'Keyword staking remains active in Privacy Mode for eligible submitted text searches in Web and All',
+                'Only an admin can turn keyword staking on or off. It is on when no admin has published a change',
+                'NIP-19 identifiers, NIP-05 addresses, URLs, and math are excluded from keyword staking requests',
+                'Npub staking is the Nostr archive. It is off by default and does not receive search placement',
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2">
                   <span className="text-primary/60 mt-0.5 shrink-0">+</span>
@@ -203,8 +205,8 @@ export default function About() {
                 { label: 'Browser-based aggregation', detail: 'Organic search and ranking work without a configured backend. The engine backend enables ads and shared search or AI credentials.' },
                 { label: 'Nostr-native', detail: 'Nostr results are first-class citizens with rich rendering — avatars, content previews, NIP-19 links.' },
                 { label: 'Federated index', detail: 'Shares one search index with 0xSearchstr — same kinds, same tags, different signer keys. Every search on either app helps both communities.' },
-                { label: 'Precommunity advertising', detail: 'One clearly marked sponsored card in Web and All, fetched independently of organic results, or a marketplace invitation when no ad is returned. Historical Nostr stakes remain archived.' },
-                { label: 'Privacy as a spectrum', detail: 'Privacy Mode limits organic search to Nostr-tier providers and disables AI answers. PRE community advertising remains active as an explicit exception — see the threat model below.' },
+                { label: 'Keyword staking', detail: 'One clearly marked keyword staking card in Web and All, fetched independently of organic results, or a marketplace invitation when no stake is returned. Admins can turn it off for everyone. Npub staking stays hidden unless you enable it in Settings.' },
+                { label: 'Privacy as a spectrum', detail: 'Privacy Mode limits organic search to Nostr-tier providers and disables AI answers. Keyword staking remains active as an explicit exception unless an admin turns it off — see the threat model below.' },
                 { label: 'Plugin architecture', detail: 'Every provider is a standalone module. Add Wikipedia, Hacker News, GitHub, Archive.org — one file each, no core changes.' },
                 { label: 'Incremental results', detail: 'Providers run in parallel. Results appear as each provider finishes, with live status indicators.' },
                 { label: 'Resilient', detail: 'Multiple SearXNG instances with failover. Multiple Nostr relays. Browser fallback links as last resort.' },
@@ -365,12 +367,12 @@ export default function About() {
               <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
                 <span className="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0" />
                 <div className="text-sm">
-                  <span className="font-medium text-foreground">PRE community privacy ads</span>
+                  <span className="font-medium text-foreground">Keyword staking</span>
                   <p className="text-muted-foreground mt-0.5">
-                    Privacy ads stay active for eligible Web/All text queries in Privacy Mode.
-                    Our backend forwards only search text to PRE community, without your Nostr
-                    account, browser cookies, or user IP headers. Ad/report links connect your
-                    browser directly to PRE community; ad clicks are counted.
+                    Keyword staking stays active for eligible Web/All text queries in Privacy Mode
+                    unless an admin turns it off. Our backend forwards only search text to PRE community,
+                    without your Nostr account, browser cookies, or user IP headers. Stake and report
+                    links connect your browser directly to PRE community; clicks are counted.
                   </p>
                 </div>
               </div>
@@ -380,7 +382,7 @@ export default function About() {
               <h4 className="text-sm font-medium text-foreground mb-2">What you can do about it:</h4>
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 {[
-                  'Privacy Mode keeps organic results on Nostr and disables AI; PRE community privacy ads remain active for eligible Web/All text queries',
+                  'Privacy Mode keeps organic results on Nostr and disables AI; keyword staking remains active for eligible Web/All text queries unless an admin turns it off',
                   'Watch the traffic-light indicator next to the search bar before every search',
                   'Add your own SearXNG instance in Settings — self-hosted instances always run first',
                   'Use Tor Browser or a VPN to hide your IP from relays and APIs',

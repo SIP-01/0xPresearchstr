@@ -1,5 +1,8 @@
 /**
- * Keyword Stakes — Presearch-style keyword staking, rebuilt Nostr-native.
+ * Npub staking — Presearch-style keyword staking, rebuilt Nostr-native.
+ *
+ * The product name for this archive is npub staking. Keyword staking is the
+ * separate PRE placement and does not use these events.
  *
  * Presearch lets advertisers stake PRE tokens on keywords; the top staker's
  * link shows when someone searches that keyword. Here the stake is your

@@ -49,6 +49,7 @@ const AppConfigSchema = z.object({
   autoIndex: z.boolean(),
   tabConfig: TabConfigSchema,
   voteWithIdentity: z.boolean(),
+  npubStaking: z.boolean(),
   disabledProviders: z.array(z.string()),
   // Tolerant: normalize + drop invalid codes from stored configs rather
   // than rejecting the whole blob over one bad entry.

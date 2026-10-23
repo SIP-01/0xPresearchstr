@@ -7,20 +7,24 @@
  *   2. Trending searches — hashed term signals (kind 30078): a term's
  *      plaintext only becomes visible once 3+ independent devices searched
  *      it, so nobody's confidential query ever appears here;
- *   3. Archived keyword stakes — historical Nostr entries, no search placement.
+ *   3. Npub staking — historical Nostr keyword stakes, hidden unless the
+ *      visitor turns the archive on in Settings. No search placement.
  * Clicking any query starts a fresh search using the current search settings.
  */
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
+import { nip19 } from 'nostr-tools';
 import { Compass, Search, TrendingUp, Clock, ArrowRight, Gem, FileText, Users } from 'lucide-react';
 
 import { Layout } from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAppContext } from '@/hooks/useAppContext';
 import { useTrendingTerms, type TrendingTerm } from '@/hooks/useTrendingTerms';
 import { useRecentStakes, type StakeEntry } from '@/hooks/useRecentStakes';
 import { useRecentIndexedDocs, type IndexedDocEntry } from '@/hooks/useRecentIndexedDocs';
+import { npubShort } from '@/lib/nostrHelpers';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 function timeAgo(timestamp: number): string {
@@ -31,14 +35,27 @@ function timeAgo(timestamp: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+function stakerNpub(pubkey: string): string | null {
+  if (!/^[0-9a-f]{64}$/i.test(pubkey)) return null;
+  try {
+    return nip19.npubEncode(pubkey);
+  } catch {
+    return null;
+  }
+}
+
 export default function Explore() {
+  const { config } = useAppContext();
+  const showNpubStaking = config.npubStaking;
   const { data: entries, isLoading } = useTrendingTerms();
-  const { data: stakes } = useRecentStakes();
+  const { data: stakes, isLoading: stakesLoading } = useRecentStakes(50, showNpubStaking);
   const { data: docs, isLoading: docsLoading } = useRecentIndexedDocs();
 
   useSeoMeta({
     title: 'Explore the Index - Presearchstr',
-    description: 'Browse trending searches, archived keyword stakes, and recently indexed pages from the shared Nostr web index.',
+    description: showNpubStaking
+      ? 'Browse trending searches, npub staking, and recently indexed pages from the shared Nostr web index.'
+      : 'Browse trending searches and recently indexed pages from the shared Nostr web index.',
   });
 
   return (
@@ -52,9 +69,11 @@ export default function Explore() {
           <h1 className="text-3xl font-bold tracking-tight">Explore the Index</h1>
         </div>
         <p className="text-muted-foreground mb-8 leading-relaxed max-w-2xl">
-          Every search on Presearchstr grows a shared index on Nostr. Recently indexed pages,
-          trending searches, and archived keyword stakes — all of it straight from relays,
-          signed by the community.
+          Every search on Presearchstr grows a shared index on Nostr. Recently indexed pages
+          and trending searches come straight from relays, signed by the community.
+          {showNpubStaking
+            ? ' Npub staking is on, so historical Nostr stakes and their npubs are listed below.'
+            : ' Npub staking stays hidden until you turn it on in Settings.'}
         </p>
 
         {/* Stats */}
@@ -175,26 +194,41 @@ export default function Explore() {
           </section>
         )}
 
-        {/* Historical keyword stakes */}
-        {stakes && stakes.length > 0 && (
-          <>
-            <div className="flex items-center gap-2 mt-10 mb-4">
+        {/* Npub staking — off unless this visitor enables it in Settings */}
+        {showNpubStaking && (
+          <section className="mt-10" aria-label="Npub staking">
+            <div className="flex items-center gap-2 mb-4">
               <Gem className="w-4 h-4 text-primary" />
-              <h2 className="text-lg font-semibold tracking-tight">Keyword Stakes Archive</h2>
+              <h2 className="text-lg font-semibold tracking-tight">Npub staking</h2>
             </div>
-            <div className="grid sm:grid-cols-2 gap-3">
-              {stakes.slice(0, 10).map((stake) => (
-                <StakeCard key={`${stake.staker}:${stake.keyword.toLowerCase()}`} stake={stake} />
-              ))}
-            </div>
+            {stakesLoading ? (
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Skeleton className="h-24 rounded-xl" />
+                <Skeleton className="h-24 rounded-xl" />
+              </div>
+            ) : stakes && stakes.length > 0 ? (
+              <div className="grid sm:grid-cols-2 gap-3">
+                {stakes.slice(0, 10).map((stake) => (
+                  <StakeCard key={`${stake.staker}:${stake.keyword.toLowerCase()}`} stake={stake} />
+                ))}
+              </div>
+            ) : (
+              <Card className="border-dashed">
+                <CardContent className="py-12 px-8 text-center">
+                  <p className="text-muted-foreground max-w-sm mx-auto">
+                    No npub stakes yet. Keyword staking on search results is separate and stays on.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
             <p className="text-xs text-muted-foreground/60 mt-3 leading-relaxed">
-              Historical stakes signed by their authors&apos; Nostr keys. These entries no longer
-              receive search placement. Current keyword advertising is managed at{' '}
+              Historical stakes signed by their authors&apos; Nostr keys. These entries do not
+              receive search placement. Keyword staking on search results is managed at{' '}
               <a href="https://precommunity.org/keyword-market" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
                 Precommunity
               </a>.
             </p>
-          </>
+          </section>
         )}
 
         {/* Footnote */}
@@ -203,9 +237,10 @@ export default function Explore() {
           per URL per indexer, from any compatible client. Trending searches are k-anonymity
           term signals (kind 30078): devices publish only a hash of what they searched, and a
           term's plaintext is revealed by the network only after 3+ independent devices
-          searched it. Rare queries are not published as plaintext trending events. PRE community
-          (the PRE token community) resolves blockchain keyword ad data through our backend
-          using only eligible Web/All search queries, including in Privacy Mode. The API forwards
+          searched it. Rare queries are not published as plaintext trending events. Keyword staking
+          (the PRE token community) resolves placements through our backend
+          using only eligible Web/All search queries, including in Privacy Mode, and stays on
+          unless an admin turns it off. The API forwards
           no Nostr account, browser cookies, or user IP headers; see <Link to="/about" className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">About</Link> for details.
         </p>
       </div>
@@ -258,31 +293,42 @@ function DocCard({ doc }: { doc: IndexedDocEntry }) {
 function StakeCard({ stake }: { stake: StakeEntry }) {
   let domain = stake.url;
   try { domain = new URL(stake.url).hostname.replace(/^www\./, ''); } catch { /* magnet:/ipfs: etc. */ }
+  const npub = stakerNpub(stake.staker);
 
   return (
-    <Link to={`/?q=${encodeURIComponent(stake.keyword)}`} className="group block">
-      <Card className="h-full border-primary/20 bg-primary/[0.03] hover:border-primary/40 hover:bg-primary/[0.06] transition-all duration-200">
-        <CardContent className="py-4 px-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-medium text-foreground group-hover:text-primary transition-colors truncate">
-                {stake.keyword}
-              </p>
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/30 text-primary">
-                  {domain}
-                </Badge>
-                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60">
-                  <Clock className="w-3 h-3" />
-                  {timeAgo(stake.stakedAt)}
-                </span>
-              </div>
+    <Card className="h-full border-primary/20 bg-primary/[0.03] hover:border-primary/40 hover:bg-primary/[0.06] transition-all duration-200">
+      <CardContent className="py-4 px-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <Link
+              to={`/?q=${encodeURIComponent(stake.keyword)}`}
+              className="block font-medium text-foreground hover:text-primary transition-colors truncate rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {stake.keyword}
+            </Link>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/30 text-primary">
+                {domain}
+              </Badge>
+              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60">
+                <Clock className="w-3 h-3" />
+                {timeAgo(stake.stakedAt)}
+              </span>
+              {npub && (
+                <Link
+                  to={`/${npub}`}
+                  className="font-mono text-[11px] text-muted-foreground hover:text-primary rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Staker ${npubShort(stake.staker)}`}
+                >
+                  {npubShort(stake.staker)}
+                </Link>
+              )}
             </div>
-            <Gem className="w-4 h-4 text-primary/40 group-hover:text-primary transition-colors shrink-0 mt-1" />
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+          <Gem className="w-4 h-4 text-primary/40 shrink-0 mt-1" aria-hidden="true" />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -14,7 +14,7 @@ import {
   CheckCircle2, XCircle, CircleDashed, ExternalLink, ShieldCheck, Check,
   ShieldAlert, ShieldX, Shield, Eye, EyeOff, Wifi, Zap, Fingerprint, Copy, Download, Undo2,
   ChevronUp, ChevronDown, Star, Power, ThumbsUp, Database, Sparkles, Lock, Code, BookOpen,
-  Languages, X,
+  Languages, X, Gem,
 } from 'lucide-react';
 
 import { Layout } from '@/components/Layout';
@@ -34,6 +34,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { useTheme } from '@/hooks/useTheme';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useKeywordStaking } from '@/hooks/useKeywordStaking';
 import { ALL_SOURCE_TABS, DEFAULT_TAB_CONFIG } from '@/lib/sourceTabs';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useSearxngInstances } from '@/hooks/useSearxngInstances';
@@ -324,8 +325,8 @@ function PrivacySection() {
             </div>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               {privacyMode
-                ? 'Active. Nostr organic results; AI disabled. PRE community privacy ads still resolve eligible Web/All queries through the backend.'
-                : 'Off. Enable for Nostr-only organic results with clearnet APIs, proxies, and AI disabled. PRE community privacy ads remain active for eligible Web/All queries.'}
+                ? 'Active. Nostr organic results; AI disabled. Keyword staking still resolves eligible Web/All queries through the backend.'
+                : 'Off. Enable for Nostr-only organic results with clearnet APIs, proxies, and AI disabled. Keyword staking remains active for eligible Web/All queries unless an admin turns it off.'}
             </p>
           </div>
         </CardContent>
@@ -409,7 +410,7 @@ function PrivacySection() {
         })}
         <div className="px-3 py-2.5 text-xs border-t border-border/40">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium">PRE community privacy ads</span>
+            <span className="font-medium">Keyword staking</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-500/30 text-red-600 dark:text-red-500">
               engine proxy
             </Badge>
@@ -418,10 +419,11 @@ function PrivacySection() {
             </Badge>
           </div>
           <p className="text-muted-foreground/80 leading-relaxed mt-0.5">
-            PRE community (the PRE token community) resolves blockchain keyword ad data from eligible
+            Keyword staking is the PRE community placement. PRE community resolves it from eligible
             Web/All text queries through our backend, even in Privacy Mode. The API sends only
             search text, without your Nostr account, browser cookies, or user IP headers.
-            Ad/report links connect your browser directly to PRE community; ad clicks are counted.
+            Stake and report links connect your browser directly to PRE community; clicks are counted.
+            This placement stays on unless an admin turns it off in Staking below.
           </p>
         </div>
         {/* The AI answer layer is opt-in and gets the evidence pack, not
@@ -452,6 +454,104 @@ function PrivacySection() {
         your personal Nostr account, and never contain your query. For the full picture, read the{' '}
         <Link to="/about" className="text-primary hover:underline">threat model</Link>.
       </p>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Staking                                                             */
+/* ------------------------------------------------------------------ */
+
+function StakingSection() {
+  const { config, updateConfig } = useAppContext();
+  const { toast } = useToast();
+  const keywordStaking = useKeywordStaking();
+  const npubStaking = config.npubStaking;
+
+  const onKeywordStaking = async (checked: boolean) => {
+    try {
+      await keywordStaking.setEnabled(checked);
+      toast({
+        title: checked ? 'Keyword staking is on' : 'Keyword staking is off',
+        description: 'This applies to everyone using Presearchstr.',
+      });
+    } catch (err) {
+      toast({
+        title: 'Could not update keyword staking',
+        description: err instanceof Error ? err.message : 'Publish failed',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  return (
+    <section className="mb-10">
+      <h2 className="text-sm font-semibold mb-1">Staking</h2>
+      <p className="text-xs text-muted-foreground mb-4">
+        Keyword staking is the PRE placement on search. Npub staking is the older Nostr archive, signed by npubs.
+      </p>
+
+      <Card className={cn('mb-4 transition-colors', keywordStaking.enabled ? 'border-primary/30 bg-primary/5' : 'border-border/60')}>
+        <CardContent className="py-4 flex items-start gap-4">
+          <div className={cn(
+            'flex items-center justify-center w-9 h-9 rounded-lg shrink-0 border',
+            keywordStaking.enabled ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-muted text-muted-foreground border-border',
+          )}>
+            <Gem className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium flex items-center gap-2">
+                Keyword staking
+                {!keywordStaking.canToggle && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">Admins only</Badge>
+                )}
+              </span>
+              <Switch
+                checked={keywordStaking.enabled}
+                onCheckedChange={(checked) => void onKeywordStaking(checked)}
+                disabled={!keywordStaking.canToggle || keywordStaking.isSaving}
+                aria-label="Keyword staking"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              {keywordStaking.enabled
+                ? 'On for everyone. Search shows the PRE keyword stake, or an invitation to stake the word when none is returned.'
+                : 'Off for everyone. An admin published this, so search no longer shows keyword staking.'}
+              {' '}
+              {keywordStaking.canToggle
+                ? 'You are an admin, so you can turn this platform placement on or off.'
+                : 'This is a platform placement, so the switch stays locked. Only an admin can turn it on or off.'}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className={cn('transition-colors', npubStaking ? 'border-primary/30 bg-primary/5' : 'border-border/60')}>
+        <CardContent className="py-4 flex items-start gap-4">
+          <div className={cn(
+            'flex items-center justify-center w-9 h-9 rounded-lg shrink-0 border',
+            npubStaking ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-muted text-muted-foreground border-border',
+          )}>
+            <Fingerprint className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">Npub staking</span>
+              <Switch
+                checked={npubStaking}
+                onCheckedChange={(checked) => updateConfig(() => ({ npubStaking: checked }))}
+                aria-label="Npub staking"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              {npubStaking
+                ? 'On: Explore lists historical Nostr keyword stakes and each staker npub. These stakes do not change search results.'
+                : 'Off (default): npub staking stays hidden, including staker npubs. Turn it on to browse the Nostr archive.'}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </section>
   );
 }
@@ -540,7 +640,7 @@ function IndexingSection() {
             </div>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               {voteWithIdentity
-                ? 'On: 👍/👎 votes are signed by your logged-in Nostr key — attributable, like keyword stakes.'
+                ? 'On: 👍/👎 votes are signed by your logged-in Nostr key — attributable, like npub staking.'
                 : 'Off (default): votes are anonymous — signed by this device\u2019s built-in indexing identity, never linked to you.'}
               {voteWithIdentity && !user && (
                 <span className="block mt-1 text-amber-600 dark:text-amber-500">
@@ -2135,6 +2235,8 @@ export default function Settings() {
             <LanguageSection />
             <Separator className="mb-10" />
             <PrivacySection />
+            <Separator className="mb-10" />
+            <StakingSection />
           </TabsContent>
 
           {/* Engine toggles */}
