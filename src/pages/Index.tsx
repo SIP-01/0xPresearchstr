@@ -24,6 +24,7 @@ import { useAIAnswer } from '@/hooks/useAIAnswer';
 import { useSearchHotkeys } from '@/hooks/useSearchHotkeys';
 import { useAppContext } from '@/hooks/useAppContext';
 import { usePrecommunityAd, isPrecommunityQueryEligible } from '@/hooks/usePrecommunityAd';
+import { usePlatformKeywordStaking } from '@/hooks/usePlatformKeywordStaking';
 import { ALL_SOURCE_TABS } from '@/lib/sourceTabs';
 import { PRECOMMUNITY_MARKET_URL } from '@/lib/precommunity';
 import type { SearchSource } from '@/lib/providers/types';
@@ -113,7 +114,10 @@ const Index = () => {
   }, [results, source]);
 
   const organicResults = filteredResults;
-  const adQueryEligible = (source === 'web' || source === 'all') && isPrecommunityQueryEligible(activeQuery);
+  const { enabled: keywordStakingOn } = usePlatformKeywordStaking();
+  const adQueryEligible = keywordStakingOn
+    && (source === 'web' || source === 'all')
+    && isPrecommunityQueryEligible(activeQuery);
   const adsEnabled = hasSearched && adQueryEligible;
   const adQuery = usePrecommunityAd(activeQuery, adsEnabled);
 
@@ -223,7 +227,7 @@ const Index = () => {
           <div className="mt-6 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:delay-500">
             <PrivacyIndicator
               source={providerSource as SearchSource | 'all'}
-              precommunityEligible={(source === 'web' || source === 'all') && isPrecommunityQueryEligible(query)}
+              precommunityEligible={keywordStakingOn && (source === 'web' || source === 'all') && isPrecommunityQueryEligible(query)}
             />
           </div>
 
@@ -240,7 +244,7 @@ const Index = () => {
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground/70 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:delay-1000">
             <span className="inline-flex items-center gap-1.5">
               <Gem className="w-3 h-3 text-primary/70" />
-              Keyword advertising with Precommunity
+              Keyword staking
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Search className="w-3 h-3 text-primary/70" />
@@ -283,7 +287,7 @@ const Index = () => {
           {privacyMode && (suppressedProviders.length > 0 || adsEnabled) && source !== 'i2p' && (
             <p className="text-xs text-muted-foreground max-w-2xl">
               Privacy Mode — Nostr organic search; AI off.
-              {adsEnabled && ' PRE community privacy ads use only your query.'}
+              {adsEnabled && ' Keyword staking uses only your query.'}
             </p>
           )}
         </div>
@@ -339,15 +343,17 @@ const Index = () => {
                         handleSubmit(q);
                       }}
                     />
-                    <a
-                      href={PRECOMMUNITY_MARKET_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 mt-5 rounded-md text-xs text-primary/80 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <Gem className="w-3 h-3" />
-                      Advertise with Precommunity
-                    </a>
+                    {keywordStakingOn && (
+                      <a
+                        href={PRECOMMUNITY_MARKET_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 mt-5 rounded-md text-xs text-primary/80 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Gem className="w-3 h-3" />
+                        Keyword staking
+                      </a>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -367,15 +373,17 @@ const Index = () => {
                       <span className="ml-2 text-primary animate-search-pulse">more loading...</span>
                     )}
                   </p>
-                  <a
-                    href={PRECOMMUNITY_MARKET_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-md text-xs text-muted-foreground/70 hover:text-primary transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <Gem className="w-3 h-3" />
-                    Advertise with Precommunity
-                  </a>
+                  {keywordStakingOn && (
+                    <a
+                      href={PRECOMMUNITY_MARKET_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-md text-xs text-muted-foreground/70 hover:text-primary transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <Gem className="w-3 h-3" />
+                      Keyword staking
+                    </a>
+                  )}
                 </div>
               )}
 

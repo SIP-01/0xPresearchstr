@@ -150,20 +150,22 @@ re-hash the plaintext and compare). Rare queries do not appear as plaintext tren
 events, and sensitive query classes (NIP-19 ids, NIP-05 addresses, URLs,
 math) are never signaled at all. See [NIP.md](NIP.md).
 
-### PRE community Privacy Ads
+### Keyword staking
 
 PRE community, the community around the PRE token, resolves blockchain keyword
 ad data through our backend using only the search query. Submitted text searches can display one
-**Sponsored · PRE community** card in **Web**
-and **All**, below any instant or AI answers and above organic results. Keyword
+**Keyword staking** card in **Web**
+and **All**, below any instant or AI answers and above organic results. The placement
+is on by default. Pre staking words are a platform setting: visitors cannot turn them
+off, and only an owner or admin can publish the switch (see [NIP.md](NIP.md)). Keyword
 advertising is managed at [Precommunity Keyword Market](https://precommunity.org/keyword-market).
 
 The browser calls `GET /api/ads/precommunity?q=…` on the engine backend. The worker
 calls Precommunity's resolve API with a server-only `KEYWORD_MARKET_API_KEY` and
 returns `{ ad: PrecommunityAd | null }`. An ad has `headline`, `description`, `url`,
 `clickUrl`, and `reportUrl` fields. When a lookup completes with `ad: null` or an
-error, the card instead shows **Your ad could be here**, inviting website promotion
-for the submitted query with an **Advertise on PRE community** link to the Keyword
+error, the card instead shows **Keyword staking**, inviting a stake
+for the submitted query with a **Stake this keyword** link to the Keyword
 Marketplace. This invitation does not assert that the keyword is available and
 does not block organic search.
 
@@ -176,9 +178,9 @@ does not block organic search.
   special query classes (NIP-19, NIP-05, URLs, and math), which do not resolve ads.
 - Ad clicks open `clickUrl` in a new tab; reports open `reportUrl`. All links require
   HTTPS, and click/report links are restricted to `precommunity.org`.
-- Historical Nostr keyword stakes remain in **Explore → Keyword Stakes Archive** and
-  admin statistics. They no longer receive search placement; their schema and existing
-  events are preserved in [NIP.md](NIP.md).
+- Nostr keyword staking (npub-signed stakes) remains in **Explore → Nostr keyword staking** and
+  admin statistics. Settings hides that npub by default. Those stakes do not receive search
+  placement; their schema and existing events are preserved in [NIP.md](NIP.md).
 
 **Privacy:** eligible Web/All text queries still resolve ads in Privacy Mode.
 Our backend can observe the query and browser IP; its API request to PRE community
@@ -390,7 +392,7 @@ Roles (resolved live from owner-signed kind 30078 role lists, relay-finder patte
 | **Admin** | Stats, Reports, Moderation, Filter test |
 | **Moderator** | Stats, Reports, Moderation, Filter test |
 
-- **Stats** — indexed pages, cached queries, archived keyword stakes, open reports, relay pool sizes
+- **Stats** — indexed pages, cached queries, Nostr keyword stakes, open reports, relay pool sizes
 - **Reports** — the NIP-56 abuse inbox (kind 1984, `0xsearchstr.abuse` namespace),
   one-click "hide from results"
 - **Moderation** — team-signed NIP-32 labels (kind 1985, `0xsearchstr.moderation`)

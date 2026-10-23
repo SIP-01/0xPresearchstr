@@ -17,6 +17,7 @@ import {
   Languages, X,
 } from 'lucide-react';
 
+import { KeywordStakingSection } from '@/components/KeywordStakingSettings';
 import { Layout } from '@/components/Layout';
 import { RelayListManager } from '@/components/RelayListManager';
 import { Button } from '@/components/ui/button';
@@ -324,8 +325,8 @@ function PrivacySection() {
             </div>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               {privacyMode
-                ? 'Active. Nostr organic results; AI disabled. PRE community privacy ads still resolve eligible Web/All queries through the backend.'
-                : 'Off. Enable for Nostr-only organic results with clearnet APIs, proxies, and AI disabled. PRE community privacy ads remain active for eligible Web/All queries.'}
+                ? 'Active. Nostr organic results; AI disabled. Keyword staking still resolves eligible Web/All queries through the backend.'
+                : 'Off. Enable for Nostr-only organic results with clearnet APIs, proxies, and AI disabled. Keyword staking remains active for eligible Web/All queries.'}
             </p>
           </div>
         </CardContent>
@@ -409,7 +410,7 @@ function PrivacySection() {
         })}
         <div className="px-3 py-2.5 text-xs border-t border-border/40">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium">PRE community privacy ads</span>
+            <span className="font-medium">Keyword staking</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-500/30 text-red-600 dark:text-red-500">
               engine proxy
             </Badge>
@@ -418,10 +419,12 @@ function PrivacySection() {
             </Badge>
           </div>
           <p className="text-muted-foreground/80 leading-relaxed mt-0.5">
-            PRE community (the PRE token community) resolves blockchain keyword ad data from eligible
-            Web/All text queries through our backend, even in Privacy Mode. The API sends only
-            search text, without your Nostr account, browser cookies, or user IP headers.
-            Ad/report links connect your browser directly to PRE community; ad clicks are counted.
+            Keyword staking is on by default. PRE community (the PRE token community) resolves
+            blockchain keyword ad data from eligible Web/All text queries through our backend, even
+            in Privacy Mode. Pre staking words cannot be turned off here — only an admin can change
+            the platform switch. The API sends only search text, without your Nostr account, browser
+            cookies, or user IP headers. Ad/report links connect your browser directly to PRE community;
+            ad clicks are counted.
           </p>
         </div>
         {/* The AI answer layer is opt-in and gets the evidence pack, not
@@ -2135,6 +2138,8 @@ export default function Settings() {
             <LanguageSection />
             <Separator className="mb-10" />
             <PrivacySection />
+            <Separator className="mb-10" />
+            <KeywordStakingSection />
           </TabsContent>
 
           {/* Engine toggles */}

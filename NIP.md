@@ -9,12 +9,13 @@ This engine's identity is explicit and centralized in
 |---|---|---|
 | SIP-01 observations (kind 39697) | `widx:*` (SIP-01 spec) | **Protocol data — shared with every SIP-01 client** |
 | Legacy query cache (kind 30078) | `0xsearchstr:cache:*` | Fork-family federation (frozen, read-only here) |
-| Keyword stakes (kind 30078) | `0xsearchstr:stake:*` | Historical fork-family data — read by Explore and admin statistics; search placement retired |
+| Keyword stakes (kind 30078) | `0xsearchstr:stake:*` | Nostr npub staking — publishable, hidden in Settings by default; Explore archive only, search placement is the PRE keyword-staking card |
 | Community submissions (kind 30078) | `0xsearchstr:submit:*` | Fork-family federation |
 | Term signals (kind 30078) | `0xsearchstr:term:*` / `0xsearchstr:term-reveal:*` | Fork-family federation (hashed k-anonymity) |
 | **Moderation labels** (NIP-32, kind 1985) | `presearchstr.moderation` | **This engine only** — trusted authors are this app's owner + role lists |
 | **Abuse inbox** (NIP-56, kind 1984) | `presearchstr.abuse` | **This engine only** |
 | **Role lists** (kind 30078) | `presearchstr:admin-roles` / `presearchstr:mod-roles` | **This engine only** |
+| **Keyword staking switch** (kind 30078) | `presearchstr:keyword-staking` | **This engine only** — owner or current admin pubkeys; missing event means on |
 | Local settings (localStorage) | `presearchstr:*` | This engine only (per-origin anyway) |
 
 Legacy control namespaces `0xsearchstr.moderation` / `0xsearchstr.abuse`
@@ -44,7 +45,7 @@ formats. Current support:
 | NIP-56 | Reporting | 1984 | ✅ write (Policy page abuse reports, with NIP-32 labels) |
 | NIP-65 | Relay list metadata | 10002 | ✅ read + write (Settings → Your Relays) |
 | NIP-77 | Negentropy sync | — | 📖 documented in SIP-01 §15 (relay-to-relay, nothing client-side) |
-| NIP-78 | App-specific data | 30078 | ✅ submissions / term signals (read + write) · legacy cache and archived stakes (read-only, see below) |
+| NIP-78 | App-specific data | 30078 | ✅ submissions / term signals / npub keyword stakes (read + write) · platform keyword-staking switch (owner + admins) · legacy cache (read-only) |
 | NIP-92 | Media attachments (`imeta`) | 1 | ✅ read (inline thumbnails in results) |
 | NIP-94 | File metadata | 1063 | ✅ read (file results) |
 | NIP-B0 | Web bookmarks | 39701 | ✅ read (Community provider — user-curated links) |
@@ -264,17 +265,57 @@ plaintext (its user just typed it) and publishes:
 
 ---
 
-## Keyword Stakes (kind 30078) — historical archive
+## Keyword staking
 
-This preserved schema describes the former Nostr-native keyword staking feature:
-an addressable event bound a normalized keyword to a URL, signed by the staker's
-identity. Presearchstr no longer publishes stakes or uses them for search placement.
-Existing events remain readable in the Explore archive and administrator statistics.
+Search shows **keyword staking**: one PRE community placement for an eligible
+Web or All text query. That placement is on by default. Visitors cannot turn
+pre staking words off. The owner or a current admin publishes the switch below;
+every client follows the newest event from those pubkeys. A missing or invalid
+event leaves keyword staking on.
 
-Current sponsored placements come from Precommunity's server-side resolve API,
-outside the Nostr search pipeline. They do not introduce a Nostr kind, tags, schema,
-or migration, and are never published as index events. Historical stake data and
-the event format below remain unchanged for compatible readers.
+Nostr keyword staking (the npub-signed stake schema further down) remains.
+Settings hides that npub until the visitor reveals it, and those stakes stay in
+the Explore archive. They do not replace the platform placement.
+
+### Platform switch (kind 30078)
+
+```json
+{
+  "kind": 30078,
+  "pubkey": "<owner or current admin pubkey>",
+  "content": "{\"enabled\": true}",
+  "tags": [
+    ["d", "presearchstr:keyword-staking"],
+    ["t", "presearchstr-platform"],
+    ["alt", "Presearchstr keyword staking is on"]
+  ]
+}
+```
+
+Readers filter `authors` to the owner pubkey plus the owner-signed admin list.
+The `d` tag alone is not a trust boundary. `content.enabled` must be a boolean.
+Newest `created_at` wins; equal timestamps break ties by the lower pubkey.
+
+```json
+{
+  "kinds": [30078],
+  "authors": ["<owner>", "<admin>", "..."],
+  "#d": ["presearchstr:keyword-staking"],
+  "limit": 25
+}
+```
+
+## Keyword Stakes (kind 30078) — Nostr npub staking
+
+This schema is the Nostr-native keyword stake: an addressable event binds a
+normalized keyword to a URL and is signed by the staker's npub. Settings keeps
+this flow hidden by default, and the npub stays masked until the visitor asks
+to see it. Published stakes are readable in the Explore archive and admin
+statistics. They do not receive search placement.
+
+The search placement named keyword staking comes from PRE community's resolve
+API, gated by the platform switch above. It is not published as an index event.
+The event format below remains unchanged for compatible readers.
 
 ### Event Structure
 
@@ -296,7 +337,7 @@ the event format below remain unchanged for compatible readers.
 
 ### Historical rules
 
-- **Any author could stake** — public UGC, archive readers do NOT filter by author. Clients MUST validate structure (`d`, `title`, `url` tags required) and apply the same URL allowlist as community submissions.
+- **Any author may stake** — public UGC, archive readers do NOT filter by author. Clients MUST validate structure (`d`, `title`, `url` tags required) and apply the same URL allowlist as community submissions. Settings hides the npub and the form until the visitor opens them.
 - **One stake per keyword per pubkey**: the d-tag is `0xsearchstr:stake:<normalized-keyword>`, so re-staking the same keyword atomically replaces the staker's previous entry.
 - **Former exact-match placement**: clients matched a normalized search query to the normalized keyword using a single `#d` filter. This placement is retired in Presearchstr.
 - **Former competition rule**: clients ranked competing stakes by recency and showed at most three. The schema remains compatible with historical readers, but Presearchstr no longer ranks or displays stakes in search results.

@@ -180,7 +180,7 @@ export default function Explore() {
           <>
             <div className="flex items-center gap-2 mt-10 mb-4">
               <Gem className="w-4 h-4 text-primary" />
-              <h2 className="text-lg font-semibold tracking-tight">Keyword Stakes Archive</h2>
+              <h2 className="text-lg font-semibold tracking-tight">Nostr keyword staking</h2>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               {stakes.slice(0, 10).map((stake) => (
@@ -188,8 +188,8 @@ export default function Explore() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground/60 mt-3 leading-relaxed">
-              Historical stakes signed by their authors&apos; Nostr keys. These entries no longer
-              receive search placement. Current keyword advertising is managed at{' '}
+              Historical stakes signed with each author&apos;s npub. These entries stay in the archive
+              and do not replace platform keyword staking on search. Current placements are managed at{' '}
               <a href="https://precommunity.org/keyword-market" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
                 Precommunity
               </a>.

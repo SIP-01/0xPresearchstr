@@ -46,6 +46,12 @@ export const APP_PROFILE = {
     adminRolesDTag: 'presearchstr:admin-roles',
     modRolesDTag: 'presearchstr:mod-roles',
     rolesTTag: 'presearchstr-roles',
+    /**
+     * Platform keyword staking switch (kind 30078). Owner or admin signed.
+     * Missing event means on. Visitors cannot change it.
+     */
+    keywordStakingDTag: 'presearchstr:keyword-staking',
+    platformTTag: 'presearchstr-platform',
   },
 
   /**
