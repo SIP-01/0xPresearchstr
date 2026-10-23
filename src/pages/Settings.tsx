@@ -426,10 +426,11 @@ function PrivacySection() {
           </div>
           <p className="text-muted-foreground/80 leading-relaxed mt-0.5">
             Keyword staking stays on for eligible Web/All text queries, including in Privacy Mode,
-            unless a team admin turns the platform switch off. PRE community (the PRE token community)
-            resolves the staking words through our backend. The API sends only search text, without
-            your Nostr account, browser cookies, or user IP headers. Ad and report links connect your
-            browser directly to PRE community; clicks are counted. Visitors cannot remove those words.
+            unless a team admin turns the platform switch off. Staked PRE keywords are read from the
+            public PRE community ledger in the browser. A counted ad creative, when the engine backend
+            has one, is resolved through our backend, which sends only the search text, without your
+            Nostr account or browser cookies. Ad and report links connect your browser directly to PRE
+            community; clicks are counted. Visitors cannot remove those words.
           </p>
         </div>
         {/* The AI answer layer is opt-in and gets the evidence pack, not

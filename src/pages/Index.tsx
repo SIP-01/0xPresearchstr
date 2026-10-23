@@ -7,7 +7,7 @@ import { Layout } from '@/components/Layout';
 import { SearchBar } from '@/components/SearchBar';
 import { SourceTabs, type SourceTabValue } from '@/components/SourceTabs';
 import { UnifiedResultCard } from '@/components/UnifiedResultCard';
-import { PrecommunityAdCard, PrecommunityAdInvite } from '@/components/PrecommunityAdCard';
+import { PrecommunityAdCard, PrecommunityAdInvite, PublicKeywordStakeCard } from '@/components/PrecommunityAdCard';
 import { VoteTalliesProvider } from '@/components/VoteButtons';
 import { AIAnswerCard } from '@/components/AIAnswerCard';
 import { ProviderStatus } from '@/components/ProviderStatus';
@@ -23,7 +23,7 @@ import { useInstantAnswer } from '@/hooks/useInstantAnswer';
 import { useAIAnswer } from '@/hooks/useAIAnswer';
 import { useSearchHotkeys } from '@/hooks/useSearchHotkeys';
 import { useAppContext } from '@/hooks/useAppContext';
-import { usePrecommunityAd, isPrecommunityQueryEligible } from '@/hooks/usePrecommunityAd';
+import { usePrecommunityAd, usePublicKeywordStake, isPrecommunityQueryEligible } from '@/hooks/usePrecommunityAd';
 import { usePlatformKeywordStaking } from '@/hooks/usePlatformKeywordStaking';
 import { ALL_SOURCE_TABS } from '@/lib/sourceTabs';
 import { PRECOMMUNITY_MARKET_URL } from '@/lib/precommunity';
@@ -120,6 +120,8 @@ const Index = () => {
     && isPrecommunityQueryEligible(activeQuery);
   const adsEnabled = hasSearched && adQueryEligible;
   const adQuery = usePrecommunityAd(activeQuery, adsEnabled);
+  const keywordStake = usePublicKeywordStake(activeQuery, adsEnabled);
+  const placementSettled = !adQuery.isPending && !keywordStake.isPending;
 
   const totalResults = organicResults.length;
 
@@ -314,10 +316,14 @@ const Index = () => {
             />
           )}
 
-          {adsEnabled && !adQuery.isPending && (
-            adQuery.data?.ad
-              ? <PrecommunityAdCard ad={adQuery.data.ad} className="mb-4" />
-              : <PrecommunityAdInvite keyword={activeQuery} className="mb-4" />
+          {adsEnabled && adQuery.data?.ad && (
+            <PrecommunityAdCard ad={adQuery.data.ad} stake={keywordStake.data} className="mb-4" />
+          )}
+          {adsEnabled && !adQuery.data?.ad && keywordStake.data && (
+            <PublicKeywordStakeCard stake={keywordStake.data} className="mb-4" />
+          )}
+          {adsEnabled && placementSettled && !adQuery.data?.ad && !keywordStake.data && (
+            <PrecommunityAdInvite keyword={activeQuery} className="mb-4" />
           )}
 
           {/* Vote tallies load once per visible result set (batched) and
