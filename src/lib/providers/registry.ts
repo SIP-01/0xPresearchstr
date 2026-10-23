@@ -21,6 +21,7 @@ import { hackerNewsProvider } from './hacker-news';
 import { stackOverflowProvider } from './stackoverflow';
 import { gitProvider } from './git';
 import { nostrWikiProvider } from './wiki';
+import { stakesProvider } from './stakes';
 
 /**
  * All registered search providers, in display/priority order.
@@ -39,6 +40,7 @@ export const ALL_PROVIDERS: SearchProvider[] = [
   searxngProvider,
   webIndexProvider,
   cachedIndexProvider,
+  stakesProvider,
   communityProvider,
   nostrProvider,
   gitProvider,

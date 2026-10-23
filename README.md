@@ -150,35 +150,36 @@ re-hash the plaintext and compare). Rare queries do not appear as plaintext tren
 events, and sensitive query classes (NIP-19 ids, NIP-05 addresses, URLs,
 math) are never signaled at all. See [NIP.md](NIP.md).
 
-### PRE community Privacy Ads
+### Keyword Staking
 
 PRE community, the community around the PRE token, resolves blockchain keyword
 ad data through our backend using only the search query. Submitted text searches can display one
-**Sponsored · PRE community** card in **Web**
-and **All**, below any instant or AI answers and above organic results. Keyword
-advertising is managed at [Precommunity Keyword Market](https://precommunity.org/keyword-market).
+**Keyword Staking** card in **Web**
+and **All**, below any instant or AI answers and above organic results. This is a
+**platform placement** — on by default, and only admins can turn it off
+(Settings → Engines or Admin → Keyword Staking). Keyword advertising is managed at
+[Precommunity Keyword Market](https://precommunity.org/keyword-market).
 
 The browser calls `GET /api/ads/precommunity?q=…` on the engine backend. The worker
 calls Precommunity's resolve API with a server-only `KEYWORD_MARKET_API_KEY` and
 returns `{ ad: PrecommunityAd | null }`. An ad has `headline`, `description`, `url`,
 `clickUrl`, and `reportUrl` fields. When a lookup completes with `ad: null` or an
-error, the card instead shows **Your ad could be here**, inviting website promotion
-for the submitted query with an **Advertise on PRE community** link to the Keyword
-Marketplace. This invitation does not assert that the keyword is available and
-does not block organic search.
+error, the card instead shows **Stake this keyword**, inviting website promotion
+for the submitted query with a link to the Keyword Marketplace. This invitation
+does not assert that the keyword is available and does not block organic search.
 
 - Ads are independent of result counts, ranking, votes, Nostr indexing, and AI evidence.
 - Pagination and switching between Web and All retain the same ad for the submitted query.
-- PRE community advertising is an explicit Privacy Mode exception: eligible submitted
+- Keyword Staking is an explicit Privacy Mode exception: eligible submitted
   text searches in Web and All still resolve ads and show ads or marketplace invitations.
   Organic search uses Nostr-tier providers only and AI answers remain disabled in this mode.
   The invitation stays hidden during the initial lookup, on other tabs, and for
   special query classes (NIP-19, NIP-05, URLs, and math), which do not resolve ads.
 - Ad clicks open `clickUrl` in a new tab; reports open `reportUrl`. All links require
   HTTPS, and click/report links are restricted to `precommunity.org`.
-- Historical Nostr keyword stakes remain in **Explore → Keyword Stakes Archive** and
-  admin statistics. They no longer receive search placement; their schema and existing
-  events are preserved in [NIP.md](NIP.md).
+- **Nostr Keyword Staking** (npub-signed kind 30078 stakes) remains available and is
+  **hidden from search by default**. Enable it in Settings → Engines. Explore still
+  lists recent npub stakes. Schema: [NIP.md](NIP.md).
 
 **Privacy:** eligible Web/All text queries still resolve ads in Privacy Mode.
 Our backend can observe the query and browser IP; its API request to PRE community
@@ -390,7 +391,7 @@ Roles (resolved live from owner-signed kind 30078 role lists, relay-finder patte
 | **Admin** | Stats, Reports, Moderation, Filter test |
 | **Moderator** | Stats, Reports, Moderation, Filter test |
 
-- **Stats** — indexed pages, cached queries, archived keyword stakes, open reports, relay pool sizes
+- **Stats** — indexed pages, cached queries, Nostr keyword stakes, open reports, relay pool sizes
 - **Reports** — the NIP-56 abuse inbox (kind 1984, `0xsearchstr.abuse` namespace),
   one-click "hide from results"
 - **Moderation** — team-signed NIP-32 labels (kind 1985, `0xsearchstr.moderation`)
@@ -436,7 +437,7 @@ federation namespaces (`0xsearchstr:*` protocol data, shared by design).
 
 | Pool | Purpose | Defaults |
 |------|---------|----------|
-| **Index Relays** | Where the community index lives — SIP-01 observations (kind 39697) and community submissions are published and read; legacy query cache and archived keyword stakes remain readable. Every browser running the app can be an indexing node; this is its peer list. | `relay-na1.metanomalist.com` (NIP-50 + NIP-77 index relay), the UNCAGED SIP cluster (`test-sip-relay.sip-01test`, `sip-relay-2.sip-booster-relay`, `sip-relay-3.uncaged-sip`, `sip-relay-4.sip-relay-4` — serverless SIP-01 index relays), `relay.ditto.pub`, `jskitty.cat/nostr`, `search.nos.today`, `relay.primal.net` + auto-discovered SIP-01 relays |
+| **Index Relays** | Where the community index lives — SIP-01 observations (kind 39697) and community submissions are published and read; legacy query cache and Nostr keyword stakes remain readable. Every browser running the app can be an indexing node; this is its peer list. | `relay-na1.metanomalist.com` (NIP-50 + NIP-77 index relay), the UNCAGED SIP cluster (`test-sip-relay.sip-01test`, `sip-relay-2.sip-booster-relay`, `sip-relay-3.uncaged-sip`, `sip-relay-4.sip-relay-4` — serverless SIP-01 index relays), `relay.ditto.pub`, `jskitty.cat/nostr`, `search.nos.today`, `relay.primal.net` + auto-discovered SIP-01 relays |
 | **Search Relays** | NIP-50 full-text Nostr search (read-only) | `relay.ditto.pub`, `relay-na1.metanomalist.com`, the UNCAGED SIP cluster, `relay.nostr.band`, `search.nos.today`, `relay.noswhere.com`, `relay.pocketnostr.com` + auto-discovered NIP-50 relays |
 | **Git Relays** | NIP-34 repos/issues/PRs/patches for the Code tab (read-only) | `ngit.danconwaydev.com`, `gitnostr.com`, `relay.ngit.dev`, `indexer.coracle.social`, `index.ngit.dev`, `git.shakespeare.diy` |
 | **Wiki Relays** | NIP-54 wiki articles (read-only) — the pool wikistr reads | `relay.wikifreedia.xyz`, `nostr.wine`, `nostr21.com` |
@@ -523,7 +524,8 @@ The Nostr schemas this app uses are documented in [NIP.md](NIP.md) and the canon
 - **Search cache** (`0xsearchstr:cache:*`) — federated auto-index, kind 30078 (legacy, frozen)
 - **Term signals** (`0xsearchstr:term:*`) — hashed k-anonymity trending, kind 30078 (no plaintext queries)
 - **Community submissions** (`0xsearchstr:submit:*`) — user-curated links, kind 30078
-- **Keyword stakes** (`0xsearchstr:stake:*`) — historical archive, kind 30078; search placement retired
+- **Keyword stakes** (`0xsearchstr:stake:*`) — Nostr (npub) staking, kind 30078; search placement off by default
+- **Platform Keyword Staking** (`presearchstr:keyword-staking`) — owner/admin on/off for PRE ads; missing event = ON
 - **Nostra Search interop** (read-only) — including NOSTRA_ENC_V1 payloads
 
 We also read/write existing NIPs wherever they fit instead of inventing formats:

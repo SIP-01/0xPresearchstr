@@ -38,6 +38,7 @@ export function TestApp({ children }: TestAppProps) {
     autoIndex: false,
     tabConfig: DEFAULT_TAB_CONFIG,
     voteWithIdentity: false,
+    npubStaking: false,
     disabledProviders: [],
     languageFilter: [],
   };

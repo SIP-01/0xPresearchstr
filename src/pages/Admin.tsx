@@ -60,6 +60,7 @@ import {
   useRoleActions,
 } from '@/hooks/useModeration';
 import { useAdminAccess } from '@/hooks/useAdminAccess';
+import { usePlatformKeywordStaking } from '@/hooks/usePlatformKeywordStaking';
 import {
   OWNER_PUBKEY,
   ADMIN_ROLES_D_TAG,
@@ -153,6 +154,7 @@ function AdminTabs() {
         <TabsTrigger value="reports" className="gap-1.5"><Flag className="w-3.5 h-3.5" />Reports</TabsTrigger>
         <TabsTrigger value="moderation" className="gap-1.5"><EyeOff className="w-3.5 h-3.5" />Moderation</TabsTrigger>
         <TabsTrigger value="filter" className="gap-1.5"><SearchCheck className="w-3.5 h-3.5" />Filter test</TabsTrigger>
+        <TabsTrigger value="staking" className="gap-1.5"><Gem className="w-3.5 h-3.5" />Keyword Staking</TabsTrigger>
         <TabsTrigger value="ai" className="gap-1.5"><Sparkles className="w-3.5 h-3.5" />AI</TabsTrigger>
         {canManageRoles && (
           <TabsTrigger value="roles" className="gap-1.5"><Users className="w-3.5 h-3.5" />Roles</TabsTrigger>
@@ -162,9 +164,77 @@ function AdminTabs() {
       <TabsContent value="reports"><ReportsTab /></TabsContent>
       <TabsContent value="moderation"><ModerationTab /></TabsContent>
       <TabsContent value="filter"><FilterTab /></TabsContent>
+      <TabsContent value="staking"><KeywordStakingTab /></TabsContent>
       <TabsContent value="ai"><AITab /></TabsContent>
       {canManageRoles && <TabsContent value="roles"><RolesTab /></TabsContent>}
     </Tabs>
+  );
+}
+
+/* ─── Keyword Staking (platform PRE ads) ─── */
+
+function KeywordStakingTab() {
+  const { isAdmin } = useAdminAccess();
+  const { enabled, canToggle, setEnabled, isLoading } = usePlatformKeywordStaking();
+  const { toast } = useToast();
+  const [pending, setPending] = useState(false);
+
+  const handleToggle = async (checked: boolean) => {
+    setPending(true);
+    try {
+      await setEnabled(checked);
+      toast({
+        title: checked ? 'Keyword Staking on' : 'Keyword Staking off',
+        description: checked
+          ? 'PRE community keyword ads will show on Web and All searches.'
+          : 'Platform Keyword Staking is off for every visitor.',
+      });
+    } catch (err) {
+      toast({
+        title: 'Could not update Keyword Staking',
+        description: err instanceof Error ? err.message : 'Publish failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Card className="border-primary/20">
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Gem className="w-4 h-4 text-primary" />
+          Platform Keyword Staking
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          PRE community keyword ads are a platform placement. They stay on by default
+          and regular users cannot turn them off in Settings. Only the owner or an
+          admin can change this — the flag is an owner/admin-signed kind 30078 event.
+        </p>
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-border/60 bg-card">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Show Keyword Staking on search</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {enabled ? 'On — eligible Web/All queries show a Keyword Staking card.' : 'Off — PRE ads are hidden for everyone.'}
+            </p>
+          </div>
+          <Switch
+            checked={enabled}
+            disabled={!canToggle || pending || isLoading}
+            onCheckedChange={(checked) => void handleToggle(checked)}
+            aria-label="Toggle platform Keyword Staking"
+          />
+        </div>
+        {!isAdmin && (
+          <p className="text-[11px] text-muted-foreground/70">
+            Moderators can view this setting. Only admins can change it.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -183,7 +253,7 @@ function StatsTab() {
     { icon: <FileText className="w-4 h-4" />, label: 'Indexed pages (SIP-01)', value: docs?.length, loading: docsLoading },
     { icon: <Database className="w-4 h-4" />, label: 'Cached queries (legacy)', value: cached?.length, loading: cachedLoading },
     { icon: <BarChart3 className="w-4 h-4" />, label: 'Cached results (legacy)', value: cached ? totalCachedResults : undefined, loading: cachedLoading },
-    { icon: <Gem className="w-4 h-4" />, label: 'Keyword stakes (archive)', value: stakes?.length },
+    { icon: <Gem className="w-4 h-4" />, label: 'Nostr keyword stakes', value: stakes?.length },
     { icon: <Inbox className="w-4 h-4" />, label: 'Open abuse reports', value: reports?.length },
     { icon: <EyeOff className="w-4 h-4" />, label: 'Hidden targets', value: hidden?.length },
     { icon: <Globe className="w-4 h-4" />, label: 'Index relays (your pool)', value: getIndexRelayUrls().length },

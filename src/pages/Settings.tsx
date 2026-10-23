@@ -36,6 +36,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { ALL_SOURCE_TABS, DEFAULT_TAB_CONFIG } from '@/lib/sourceTabs';
 import { useAppContext } from '@/hooks/useAppContext';
+import { usePlatformKeywordStaking } from '@/hooks/usePlatformKeywordStaking';
 import { useSearxngInstances } from '@/hooks/useSearxngInstances';
 import { useSearchRelayPool, useIndexRelayPool, useGitRelayPool, useWikiRelayPool } from '@/hooks/useSearchRelayPool';
 import { useRelayDiscovery } from '@/hooks/useRelayDiscovery';
@@ -324,8 +325,8 @@ function PrivacySection() {
             </div>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               {privacyMode
-                ? 'Active. Nostr organic results; AI disabled. PRE community privacy ads still resolve eligible Web/All queries through the backend.'
-                : 'Off. Enable for Nostr-only organic results with clearnet APIs, proxies, and AI disabled. PRE community privacy ads remain active for eligible Web/All queries.'}
+                ? 'Active. Nostr organic results; AI disabled. Keyword Staking still resolves eligible Web/All queries through the backend.'
+                : 'Off. Enable for Nostr-only organic results with clearnet APIs, proxies, and AI disabled. Keyword Staking remains active for eligible Web/All queries.'}
             </p>
           </div>
         </CardContent>
@@ -364,7 +365,8 @@ function PrivacySection() {
       </h3>
       <div className="rounded-lg border border-border/60 overflow-hidden mb-2">
         {ALL_PROVIDERS.map((p, i) => {
-          const off = (config.disabledProviders ?? []).includes(p.id);
+          const off = (config.disabledProviders ?? []).includes(p.id)
+            || (p.id === 'keyword-stakes' && !config.npubStaking);
           const suppressed = privacyMode && p.privacy !== 'nostr';
           return (
             <div
@@ -409,19 +411,22 @@ function PrivacySection() {
         })}
         <div className="px-3 py-2.5 text-xs border-t border-border/40">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium">PRE community privacy ads</span>
+            <span className="font-medium">Keyword Staking</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-500/30 text-red-600 dark:text-red-500">
               engine proxy
             </Badge>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/30 text-amber-600 dark:text-amber-500">
               Privacy Mode exception
             </Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+              Platform · always on
+            </Badge>
           </div>
           <p className="text-muted-foreground/80 leading-relaxed mt-0.5">
-            PRE community (the PRE token community) resolves blockchain keyword ad data from eligible
-            Web/All text queries through our backend, even in Privacy Mode. The API sends only
+            Platform Keyword Staking resolves PRE community keyword ads from eligible
+            Web/All text queries through our backend, even in Privacy Mode. This placement
+            cannot be turned off here — only admins can change it. The API sends only
             search text, without your Nostr account, browser cookies, or user IP headers.
-            Ad/report links connect your browser directly to PRE community; ad clicks are counted.
           </p>
         </div>
         {/* The AI answer layer is opt-in and gets the evidence pack, not
@@ -446,7 +451,7 @@ function PrivacySection() {
       </div>
 
       <p className="text-[11px] text-muted-foreground/70 mt-3 leading-relaxed">
-        Organic search aggregation runs in your browser. Ads and engine-provided search or AI use the engine
+        Organic search aggregation runs in your browser. Keyword Staking and engine-provided search or AI use the engine
         backend, whose operator can see those requests. Contributed index entries are published to public
         Nostr relays under this device's dedicated indexing identity (see the Auto Indexer tab), never under
         your personal Nostr account, and never contain your query. For the full picture, read the{' '}
@@ -808,6 +813,119 @@ function SearchTabsSection() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Keyword Staking (PRE platform + optional npub)                      */
+/* ------------------------------------------------------------------ */
+
+function KeywordStakingSection() {
+  const { config, updateConfig } = useAppContext();
+  const { toast } = useToast();
+  const { enabled, canToggle, setEnabled, isLoading } = usePlatformKeywordStaking();
+  const [pending, setPending] = useState(false);
+
+  const handlePlatform = async (checked: boolean) => {
+    setPending(true);
+    try {
+      await setEnabled(checked);
+      toast({
+        title: checked ? 'Keyword Staking on' : 'Keyword Staking off',
+        description: checked
+          ? 'PRE community keyword ads will show on Web and All searches.'
+          : 'Platform Keyword Staking is off for everyone until an admin turns it back on.',
+      });
+    } catch (err) {
+      toast({
+        title: 'Could not update Keyword Staking',
+        description: err instanceof Error ? err.message : 'Publish failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <section className="mb-10">
+      <h2 className="text-sm font-semibold mb-1">Keyword Staking</h2>
+      <p className="text-xs text-muted-foreground mb-4">
+        Platform Keyword Staking shows PRE community ads on Web and All.
+        Nostr (npub) staking stays available but is hidden from search by default.
+      </p>
+
+      <div className="space-y-2">
+        <div className="flex items-start gap-3 px-4 py-3 rounded-lg border border-primary/25 bg-primary/[0.04]">
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg border border-primary/30 bg-primary/10 text-primary shrink-0">
+            <Lock className="w-3.5 h-3.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium">Keyword Staking</span>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 text-primary">
+                  PRE · platform
+                </Badge>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                  {enabled ? 'On' : 'Off'}
+                </Badge>
+              </div>
+              <Switch
+                checked={enabled}
+                disabled={!canToggle || pending || isLoading}
+                onCheckedChange={(checked) => void handlePlatform(checked)}
+                aria-label={canToggle ? 'Toggle platform Keyword Staking' : 'Platform Keyword Staking is locked'}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground/80 mt-1 leading-relaxed">
+              {canToggle
+                ? 'Admin control — turning this off hides PRE keyword ads for every visitor.'
+                : 'This is a platform placement. Regular users cannot turn it off. Only admins can change it, and it stays on by default.'}
+            </p>
+          </div>
+        </div>
+
+        <div className={cn(
+          'flex items-start gap-3 px-4 py-3 rounded-lg border transition-colors',
+          config.npubStaking ? 'border-border/60 bg-card' : 'border-border/40 bg-card/50',
+        )}>
+          <div className={cn(
+            'flex items-center justify-center w-8 h-8 rounded-lg border shrink-0',
+            config.npubStaking
+              ? 'border-primary/30 bg-primary/10 text-primary'
+              : 'border-border/60 text-muted-foreground/50',
+          )}>
+            <Zap className="w-3.5 h-3.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium">Nostr Keyword Staking</span>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-green-500/30 text-green-600 dark:text-green-500">
+                  npub
+                </Badge>
+                {!config.npubStaking && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                    Hidden
+                  </Badge>
+                )}
+              </div>
+              <Switch
+                checked={config.npubStaking}
+                onCheckedChange={(checked) => updateConfig(() => ({ npubStaking: checked }))}
+                aria-label="Toggle Nostr Keyword Staking"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground/80 mt-1 leading-relaxed">
+              {config.npubStaking
+                ? 'On: exact-match keyword stakes signed by npubs appear above organic results. You can stake a keyword from the search page.'
+                : 'Off by default. Enable to show Nostr-native keyword stakes (kind 30078) in Web and All, and to stake keywords with your npub.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Search engines (per-provider on/off)                                */
 /* ------------------------------------------------------------------ */
 
@@ -827,6 +945,8 @@ const ENGINE_META: Record<string, { icon: React.ReactNode; note: string }> = {
   git: { icon: <Code className="w-4 h-4" />, note: 'NIP-34 repos, issues, PRs & patches from ngit/GRASP relays (read-only)' },
   tor: { icon: <Shield className="w-4 h-4" />, note: '.onion hidden services via Ahmia (Tor tab)' },
 };
+
+const HIDDEN_ENGINE_IDS = new Set(['keyword-stakes']);
 
 function EnginesSection() {
   const { config, updateConfig } = useAppContext();
@@ -853,7 +973,7 @@ function EnginesSection() {
       </p>
 
       <div className="space-y-2">
-        {ALL_PROVIDERS.map((p) => {
+        {ALL_PROVIDERS.filter((p) => !HIDDEN_ENGINE_IDS.has(p.id)).map((p) => {
           const off = disabled.includes(p.id);
           const meta = ENGINE_META[p.id] ?? { icon: <Globe className="w-4 h-4" />, note: '' };
           return (
@@ -2139,6 +2259,8 @@ export default function Settings() {
 
           {/* Engine toggles */}
           <TabsContent value="engines">
+            <KeywordStakingSection />
+            <Separator className="mb-10" />
             <EnginesSection />
           </TabsContent>
 

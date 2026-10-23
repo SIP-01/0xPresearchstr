@@ -80,12 +80,17 @@ export function useProviderSearch({
     if (config.disabledProviders.length > 0) {
       providers = providers.filter((p) => !config.disabledProviders.includes(p.id));
     }
+    // Nostr (npub) keyword staking is off by default — a dedicated setting,
+    // not an engines-list toggle.
+    if (!config.npubStaking) {
+      providers = providers.filter((p) => p.id !== 'keyword-stakes');
+    }
     // Skip providers that can't possibly answer this query class
     // (a bare npub to SearXNG is pure waste + a privacy leak).
     const allowlist = providerAllowlistFor(classifyQuery(query));
     if (allowlist) providers = providers.filter((p) => allowlist.has(p.id));
     return providers;
-  }, [source, privacyMode, query, config.disabledProviders]);
+  }, [source, privacyMode, query, config.disabledProviders, config.npubStaking]);
   /**
    * The parsed structured query — computed once per query string (memoized
    * in the parser too). Providers get it for operator translation/local

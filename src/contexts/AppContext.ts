@@ -56,6 +56,11 @@ export interface AppConfig {
    * signed with the logged-in Nostr key (attributable, like keyword stakes).
    */
   voteWithIdentity: boolean;
+  /**
+   * Nostr (npub) keyword staking in search results. Off by default — PRE
+   * Keyword Staking is the platform placement. Users opt in from Settings.
+   */
+  npubStaking: boolean;
   /** Search engines (provider ids) the user has turned off in Settings. */
   disabledProviders: string[];
   /**

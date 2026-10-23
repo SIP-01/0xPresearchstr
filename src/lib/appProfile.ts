@@ -46,6 +46,12 @@ export const APP_PROFILE = {
     adminRolesDTag: 'presearchstr:admin-roles',
     modRolesDTag: 'presearchstr:mod-roles',
     rolesTTag: 'presearchstr-roles',
+    /**
+     * Owner/admin-signed platform Keyword Staking (PRE ads) flag.
+     * Missing event = ON. Regular users cannot change this.
+     */
+    keywordStakingDTag: 'presearchstr:keyword-staking',
+    platformTTag: 'presearchstr-platform',
   },
 
   /**

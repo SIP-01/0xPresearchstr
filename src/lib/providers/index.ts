@@ -19,4 +19,5 @@ export { torProvider } from './tor';
 export { wikipediaProvider } from './wikipedia';
 export { hackerNewsProvider } from './hacker-news';
 export { stackOverflowProvider } from './stackoverflow';
+export { stakesProvider } from './stakes';
 export { ALL_PROVIDERS, getProvidersForSource, getProvider, getAvailableSources } from './registry';

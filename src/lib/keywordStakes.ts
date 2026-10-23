@@ -7,6 +7,9 @@
  * event that binds the keyword to a URL. One stake per keyword per pubkey
  * (re-staking the same keyword replaces your previous stake).
  *
+ * Search placement is off by default (Settings → Nostr Keyword Staking).
+ * Platform Keyword Staking (PRE ads) is a separate, always-on placement.
+ *
  * Lives in the shared "0xsearchstr" protocol namespace so 0xSearchstr and
  * every compatible fork read the same stakes:
  *
