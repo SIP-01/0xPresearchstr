@@ -238,7 +238,7 @@ describe('Precommunity ads', () => {
     const view = render(<PrecommunityAdCard ad={{ ...TEST_AD, headline: '<img src=x onerror=alert(1)>' }} />);
     expect(view.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
     expect(view.container.querySelector('img')).toBeNull();
-    expect(view.getByText('Sponsored · PRE community')).toBeInTheDocument();
+    expect(view.getByText('Keyword Staking')).toBeInTheDocument();
     expect(view.getByText('bitcoin.org')).toBeInTheDocument();
     const links = view.getAllByRole('link');
     expect(links[0]).toHaveAttribute('href', TEST_AD.clickUrl);
@@ -289,8 +289,8 @@ describe('Precommunity ads', () => {
     await waitFor(() => expect(view.getByRole('article')).toBeInTheDocument());
     expect(requests).toEqual(['bitcoin']);
     fireEvent.click(view.getByLabelText('Privacy status: Nostr. Click for details.'));
-    expect(view.getByText('Nostr handles organic search. AI is off; PRE community privacy ads remain enabled.')).toBeInTheDocument();
-    expect(view.getByText('PRE community privacy ads')).toBeInTheDocument();
+    expect(view.getByText('Nostr handles organic search. AI is off; platform keyword staking (PRE ads) remains enabled.')).toBeInTheDocument();
+    expect(view.getByText('Keyword staking (PRE community)')).toBeInTheDocument();
     expect(view.getByText(/PRE community, the community around the PRE token, resolves blockchain keyword ads from your query through our backend/)).toBeInTheDocument();
     expect(view.getByText(/No Nostr account or browser cookies are sent/)).toBeInTheDocument();
     expect(view.queryByText(/It sees your query and IP/)).toBeNull();
@@ -339,9 +339,9 @@ describe('Precommunity ads', () => {
     await waitFor(() => expect(requests).toEqual(['tesla']));
     expect(view.queryByRole('complementary')).toBeNull();
     await act(async () => { finish?.(Response.json({ ad: null })); });
-    await waitFor(() => expect(view.getByRole('complementary', { name: 'Advertise on PRE community' })).toBeInTheDocument());
-    expect(view.getByText('Promote your website for “tesla” on the Keyword Marketplace.')).toBeInTheDocument();
-    expect(view.getByRole('link', { name: 'Advertise on PRE community' })).toHaveAttribute('href', PRECOMMUNITY_MARKET_URL);
+    await waitFor(() => expect(view.getByRole('complementary', { name: 'Keyword staking on PRE community' })).toBeInTheDocument());
+    expect(view.getByText('Stake PRE on “tesla” in the Keyword Marketplace.')).toBeInTheDocument();
+    expect(view.getByRole('link', { name: 'Stake this keyword' })).toHaveAttribute('href', PRECOMMUNITY_MARKET_URL);
     fireEvent.click(view.getByText('Next page'));
     fireEvent.change(view.getByLabelText('Ad source'), { target: { value: 'all' } });
     expect(requests).toEqual(['tesla']);
@@ -358,7 +358,7 @@ describe('Precommunity ads', () => {
   it('escapes the keyword in the invitation and uses a fixed marketplace link', () => {
     const keyword = '<img src=x onerror=alert(1)>';
     const view = render(<PrecommunityAdInvite keyword={keyword} />);
-    expect(view.getByText(`Promote your website for “${keyword}” on the Keyword Marketplace.`)).toBeInTheDocument();
+    expect(view.getByText(`Stake PRE on “${keyword}” in the Keyword Marketplace.`)).toBeInTheDocument();
     expect(view.container.querySelector('img')).toBeNull();
     expect(view.getByRole('link')).toHaveAttribute('href', PRECOMMUNITY_MARKET_URL);
     expect(view.getByRole('link')).toHaveAttribute('rel', 'noopener noreferrer');

@@ -56,6 +56,13 @@ export interface AppConfig {
    * signed with the logged-in Nostr key (attributable, like keyword stakes).
    */
   voteWithIdentity: boolean;
+  /**
+   * Nostr / npub keyword staking — off by default. When true, exact-match
+   * community stakes signed by npubs are placed above organic results and
+   * the "Stake this keyword" dialog is offered. Platform PRE keyword-staking
+   * ads are a separate admin-gated slot and are not controlled here.
+   */
+  npubKeywordStaking: boolean;
   /** Search engines (provider ids) the user has turned off in Settings. */
   disabledProviders: string[];
   /**

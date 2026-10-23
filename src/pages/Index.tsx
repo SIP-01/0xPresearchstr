@@ -8,6 +8,8 @@ import { SearchBar } from '@/components/SearchBar';
 import { SourceTabs, type SourceTabValue } from '@/components/SourceTabs';
 import { UnifiedResultCard } from '@/components/UnifiedResultCard';
 import { PrecommunityAdCard, PrecommunityAdInvite } from '@/components/PrecommunityAdCard';
+import { StakeResultCard } from '@/components/StakeResultCard';
+import { StakeKeywordDialog } from '@/components/StakeKeywordDialog';
 import { VoteTalliesProvider } from '@/components/VoteButtons';
 import { AIAnswerCard } from '@/components/AIAnswerCard';
 import { ProviderStatus } from '@/components/ProviderStatus';
@@ -24,6 +26,7 @@ import { useAIAnswer } from '@/hooks/useAIAnswer';
 import { useSearchHotkeys } from '@/hooks/useSearchHotkeys';
 import { useAppContext } from '@/hooks/useAppContext';
 import { usePrecommunityAd, isPrecommunityQueryEligible } from '@/hooks/usePrecommunityAd';
+import { usePlatformKeywordStaking } from '@/hooks/usePlatformKeywordStaking';
 import { ALL_SOURCE_TABS } from '@/lib/sourceTabs';
 import { PRECOMMUNITY_MARKET_URL } from '@/lib/precommunity';
 import type { SearchSource } from '@/lib/providers/types';
@@ -50,6 +53,9 @@ const Index = () => {
   const [query, setQuery] = useState(initialQuery);
   const [activeQuery, setActiveQuery] = useState(initialQuery);
   const [source, setSource] = useState<SourceTabValue>(initialSource);
+  const [stakeOpen, setStakeOpen] = useState(false);
+  const { preAdsEnabled } = usePlatformKeywordStaking();
+  const npubStaking = config.npubKeywordStaking;
 
   const hasSearched = activeQuery.length > 0;
 
@@ -112,8 +118,15 @@ const Index = () => {
     return results.filter((r) => r.source === source);
   }, [results, source]);
 
-  const organicResults = filteredResults;
-  const adQueryEligible = (source === 'web' || source === 'all') && isPrecommunityQueryEligible(activeQuery);
+  const stakeResults = useMemo(
+    () => (npubStaking ? filteredResults.filter((r) => r.provider === 'keyword-stake') : []),
+    [filteredResults, npubStaking],
+  );
+  const organicResults = useMemo(
+    () => filteredResults.filter((r) => r.provider !== 'keyword-stake'),
+    [filteredResults],
+  );
+  const adQueryEligible = preAdsEnabled && (source === 'web' || source === 'all') && isPrecommunityQueryEligible(activeQuery);
   const adsEnabled = hasSearched && adQueryEligible;
   const adQuery = usePrecommunityAd(activeQuery, adsEnabled);
 
@@ -154,7 +167,7 @@ const Index = () => {
 
   useSeoMeta({
     title: hasSearched ? `${activeQuery} - Presearchstr` : 'Presearchstr - Decentralized Search Aggregator',
-    description: 'Search Nostr and the web, enriched by a shared community index and sponsored keyword ads from Precommunity.',
+    description: 'Search Nostr and the web, enriched by a shared community index and keyword staking from PRE community.',
   });
 
   const handleSubmit = useCallback((value: string) => {
@@ -223,7 +236,7 @@ const Index = () => {
           <div className="mt-6 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:delay-500">
             <PrivacyIndicator
               source={providerSource as SearchSource | 'all'}
-              precommunityEligible={(source === 'web' || source === 'all') && isPrecommunityQueryEligible(query)}
+              precommunityEligible={preAdsEnabled && (source === 'web' || source === 'all') && isPrecommunityQueryEligible(query)}
             />
           </div>
 
@@ -240,7 +253,7 @@ const Index = () => {
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground/70 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:delay-1000">
             <span className="inline-flex items-center gap-1.5">
               <Gem className="w-3 h-3 text-primary/70" />
-              Keyword advertising with Precommunity
+              Keyword staking
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Search className="w-3 h-3 text-primary/70" />
@@ -283,7 +296,7 @@ const Index = () => {
           {privacyMode && (suppressedProviders.length > 0 || adsEnabled) && source !== 'i2p' && (
             <p className="text-xs text-muted-foreground max-w-2xl">
               Privacy Mode — Nostr organic search; AI off.
-              {adsEnabled && ' PRE community privacy ads use only your query.'}
+              {adsEnabled && ' Platform keyword staking uses only your query.'}
             </p>
           )}
         </div>
@@ -316,9 +329,17 @@ const Index = () => {
               : <PrecommunityAdInvite keyword={activeQuery} className="mb-4" />
           )}
 
+          {source !== 'i2p' && stakeResults.length > 0 && (
+            <div className="space-y-3 mb-4">
+              {stakeResults.map((result) => (
+                <StakeResultCard key={result.id} result={result} />
+              ))}
+            </div>
+          )}
+
           {/* Vote tallies load once per visible result set (batched) and
               flow to every card's vote buttons via context. */}
-          <VoteTalliesProvider results={organicResults}>
+          <VoteTalliesProvider results={[...stakeResults, ...organicResults]}>
 
           {/* Loading state */}
           {source !== 'i2p' && isLoading && totalResults === 0 ? (
@@ -339,15 +360,26 @@ const Index = () => {
                         handleSubmit(q);
                       }}
                     />
-                    <a
-                      href={PRECOMMUNITY_MARKET_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 mt-5 rounded-md text-xs text-primary/80 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <Gem className="w-3 h-3" />
-                      Advertise with Precommunity
-                    </a>
+                    {npubStaking ? (
+                      <button
+                        type="button"
+                        onClick={() => setStakeOpen(true)}
+                        className="inline-flex items-center gap-1.5 mt-5 rounded-md text-xs text-primary/80 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Gem className="w-3 h-3" />
+                        Be the first to stake this keyword
+                      </button>
+                    ) : adsEnabled ? (
+                      <a
+                        href={PRECOMMUNITY_MARKET_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 mt-5 rounded-md text-xs text-primary/80 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Gem className="w-3 h-3" />
+                        Stake this keyword
+                      </a>
+                    ) : null}
                   </CardContent>
                 </Card>
               )}
@@ -367,15 +399,27 @@ const Index = () => {
                       <span className="ml-2 text-primary animate-search-pulse">more loading...</span>
                     )}
                   </p>
-                  <a
-                    href={PRECOMMUNITY_MARKET_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-md text-xs text-muted-foreground/70 hover:text-primary transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <Gem className="w-3 h-3" />
-                    Advertise with Precommunity
-                  </a>
+                  {npubStaking ? (
+                    <button
+                      type="button"
+                      onClick={() => setStakeOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-md text-xs text-muted-foreground/70 hover:text-primary transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      title="Stake this keyword with your npub"
+                    >
+                      <Gem className="w-3 h-3" />
+                      Stake this keyword
+                    </button>
+                  ) : adsEnabled ? (
+                    <a
+                      href={PRECOMMUNITY_MARKET_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-md text-xs text-muted-foreground/70 hover:text-primary transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <Gem className="w-3 h-3" />
+                      Keyword staking
+                    </a>
+                  ) : null}
                 </div>
               )}
 
@@ -417,11 +461,29 @@ const Index = () => {
               {totalResults > 0 && totalResults < 5 && source !== 'tor' && (
                 <BrowserFallback query={activeQuery} className="mt-4" />
               )}
+
+              {organicResults.length === 0 && stakeResults.length > 0 && !isLoading && (
+                <Card className="border-dashed">
+                  <CardContent className="py-8 px-8 text-center">
+                    <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                      No organic results for &ldquo;{activeQuery}&rdquo; yet — just the npub
+                      keyword stake above.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
           </VoteTalliesProvider>
         </div>
       </div>
+      {npubStaking && (
+        <StakeKeywordDialog
+          open={stakeOpen}
+          onOpenChange={setStakeOpen}
+          initialKeyword={activeQuery}
+        />
+      )}
     </Layout>
   );
 };

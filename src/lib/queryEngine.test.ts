@@ -31,7 +31,7 @@ const searchState = vi.hoisted(() => ({
 
 vi.mock('@/hooks/useAppContext', () => ({
   useAppContext: () => ({ config: {
-    privacyMode: false, languageFilter: [], disabledProviders: searchState.disabledProviders,
+    privacyMode: false, languageFilter: [], disabledProviders: searchState.disabledProviders, npubKeywordStaking: false,
   } }),
 }));
 vi.mock('@/hooks/useModeration', () => ({ useModerationSet: () => null }));

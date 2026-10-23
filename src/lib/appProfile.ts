@@ -46,6 +46,12 @@ export const APP_PROFILE = {
     adminRolesDTag: 'presearchstr:admin-roles',
     modRolesDTag: 'presearchstr:mod-roles',
     rolesTTag: 'presearchstr-roles',
+    /**
+     * Owner/admin-signed platform flag for PRE keyword-staking ads
+     * (kind 30078). On by default; users cannot turn this off.
+     */
+    keywordStakingDTag: 'presearchstr:keyword-staking',
+    platformTTag: 'presearchstr-platform',
   },
 
   /**

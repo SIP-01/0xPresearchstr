@@ -80,9 +80,10 @@ export function PrivacyIndicator({ source, precommunityEligible = false, classNa
   const privacyMode = config.privacyMode;
 
   const active = getProvidersForPrivacy(source, privacyMode)
-    .filter((p) => !config.disabledProviders.includes(p.id));
+    .filter((p) => !config.disabledProviders.includes(p.id))
+    .filter((p) => p.id !== 'keyword-stakes' || config.npubKeywordStaking);
   const suppressed = privacyMode
-    ? getProvidersForSource(source).filter((p) => !config.disabledProviders.includes(p.id) && !active.some((a) => a.id === p.id))
+    ? getProvidersForSource(source).filter((p) => !config.disabledProviders.includes(p.id) && !active.some((a) => a.id === p.id) && (p.id !== 'keyword-stakes' || config.npubKeywordStaking))
     : [];
   const precommunityActive = precommunityEligible;
   const adException = precommunityActive && privacyMode;
@@ -124,7 +125,7 @@ export function PrivacyIndicator({ source, precommunityEligible = false, classNa
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
             {adException
-              ? 'Nostr handles organic search. AI is off; PRE community privacy ads remain enabled.'
+              ? 'Nostr handles organic search. AI is off; platform keyword staking (PRE ads) remains enabled.'
               : meta.description}
           </p>
         </div>
@@ -138,7 +139,7 @@ export function PrivacyIndicator({ source, precommunityEligible = false, classNa
             <div className="flex items-start gap-2 px-1 py-1">
               <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-red-500" />
               <div className="min-w-0">
-                <span className="text-xs font-medium text-foreground">PRE community privacy ads</span>
+                <span className="text-xs font-medium text-foreground">Keyword staking (PRE community)</span>
                 <p className="text-[11px] text-muted-foreground/80 leading-snug">
                   PRE community, the community around the PRE token, resolves blockchain keyword ads from your query through our backend.
                   No Nostr account or browser cookies are sent. Clicks are counted.

@@ -9,6 +9,7 @@
 import type { SearchProvider, SearchSource } from './types';
 import { webIndexProvider } from './web-index';
 import { cachedIndexProvider } from './cached-index';
+import { stakesProvider } from './stakes';
 import { nostrProvider } from './nostr';
 import { communityProvider } from './community';
 import { searxngProvider } from './searxng';
@@ -39,6 +40,7 @@ export const ALL_PROVIDERS: SearchProvider[] = [
   searxngProvider,
   webIndexProvider,
   cachedIndexProvider,
+  stakesProvider,
   communityProvider,
   nostrProvider,
   gitProvider,

@@ -11,6 +11,7 @@ export type {
 
 export { cachedIndexProvider } from './cached-index';
 export { webIndexProvider } from './web-index';
+export { stakesProvider } from './stakes';
 export { nostrProvider } from './nostr';
 export { searxngProvider } from './searxng';
 export { duckduckgoProvider } from './duckduckgo';

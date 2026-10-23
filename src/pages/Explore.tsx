@@ -7,7 +7,7 @@
  *   2. Trending searches — hashed term signals (kind 30078): a term's
  *      plaintext only becomes visible once 3+ independent devices searched
  *      it, so nobody's confidential query ever appears here;
- *   3. Archived keyword stakes — historical Nostr entries, no search placement.
+ *   3. Nostr / npub keyword stakes — optional search placement (off by default).
  * Clicking any query starts a fresh search using the current search settings.
  */
 import { Link } from 'react-router-dom';
@@ -38,7 +38,7 @@ export default function Explore() {
 
   useSeoMeta({
     title: 'Explore the Index - Presearchstr',
-    description: 'Browse trending searches, archived keyword stakes, and recently indexed pages from the shared Nostr web index.',
+    description: 'Browse trending searches, Nostr keyword stakes, and recently indexed pages from the shared Nostr web index.',
   });
 
   return (
@@ -53,7 +53,7 @@ export default function Explore() {
         </div>
         <p className="text-muted-foreground mb-8 leading-relaxed max-w-2xl">
           Every search on Presearchstr grows a shared index on Nostr. Recently indexed pages,
-          trending searches, and archived keyword stakes — all of it straight from relays,
+          trending searches, and Nostr keyword stakes — all of it straight from relays,
           signed by the community.
         </p>
 
@@ -180,7 +180,7 @@ export default function Explore() {
           <>
             <div className="flex items-center gap-2 mt-10 mb-4">
               <Gem className="w-4 h-4 text-primary" />
-              <h2 className="text-lg font-semibold tracking-tight">Keyword Stakes Archive</h2>
+              <h2 className="text-lg font-semibold tracking-tight">Nostr Keyword Stakes</h2>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               {stakes.slice(0, 10).map((stake) => (
@@ -188,8 +188,9 @@ export default function Explore() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground/60 mt-3 leading-relaxed">
-              Historical stakes signed by their authors&apos; Nostr keys. These entries no longer
-              receive search placement. Current keyword advertising is managed at{' '}
+              Nostr / npub keyword stakes signed by their authors&apos; keys. Search placement
+              is off by default — turn it on in Settings → Keyword Staking. Platform keyword
+              staking (PRE ads) is always on unless an admin disables it, and is managed at{' '}
               <a href="https://precommunity.org/keyword-market" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
                 Precommunity
               </a>.

@@ -10,6 +10,7 @@
  *   - Reports    — the NIP-56 abuse inbox (kind 1984, 0xsearchstr.abuse)
  *   - Moderation — owner-signed hidden targets (NIP-32 labels), un-hide
  *   - Filter     — test whether a URL/event id is currently filtered
+ *   - Staking    — platform PRE keyword-staking ads on/off (admin only)
  *
  * Moderation is Nostr-native: hiding publishes a kind 1985 label signed by
  * the owner key; every client filters results against owner-signed labels
@@ -60,6 +61,7 @@ import {
   useRoleActions,
 } from '@/hooks/useModeration';
 import { useAdminAccess } from '@/hooks/useAdminAccess';
+import { usePlatformKeywordStaking, usePlatformKeywordStakingActions } from '@/hooks/usePlatformKeywordStaking';
 import {
   OWNER_PUBKEY,
   ADMIN_ROLES_D_TAG,
@@ -71,6 +73,7 @@ import {
 import type { AbuseReport } from '@/hooks/useModeration';
 import { normalizeIndexUrl } from '@/lib/webIndex';
 import { getIndexRelayUrls, getSearchRelayUrls } from '@/lib/appRelays';
+import { cn } from '@/lib/utils';
 
 function timeAgo(ts: number): string {
   const diff = Math.floor(Date.now() / 1000) - ts;
@@ -144,7 +147,7 @@ export default function Admin() {
 /* ─── Tabs ─── */
 
 function AdminTabs() {
-  const { canManageRoles } = useAdminAccess();
+  const { canManageRoles, isAdmin } = useAdminAccess();
 
   return (
     <Tabs defaultValue="stats">
@@ -154,6 +157,9 @@ function AdminTabs() {
         <TabsTrigger value="moderation" className="gap-1.5"><EyeOff className="w-3.5 h-3.5" />Moderation</TabsTrigger>
         <TabsTrigger value="filter" className="gap-1.5"><SearchCheck className="w-3.5 h-3.5" />Filter test</TabsTrigger>
         <TabsTrigger value="ai" className="gap-1.5"><Sparkles className="w-3.5 h-3.5" />AI</TabsTrigger>
+        {isAdmin && (
+          <TabsTrigger value="staking" className="gap-1.5"><Gem className="w-3.5 h-3.5" />Staking</TabsTrigger>
+        )}
         {canManageRoles && (
           <TabsTrigger value="roles" className="gap-1.5"><Users className="w-3.5 h-3.5" />Roles</TabsTrigger>
         )}
@@ -163,6 +169,7 @@ function AdminTabs() {
       <TabsContent value="moderation"><ModerationTab /></TabsContent>
       <TabsContent value="filter"><FilterTab /></TabsContent>
       <TabsContent value="ai"><AITab /></TabsContent>
+      {isAdmin && <TabsContent value="staking"><StakingTab /></TabsContent>}
       {canManageRoles && <TabsContent value="roles"><RolesTab /></TabsContent>}
     </Tabs>
   );
@@ -183,7 +190,7 @@ function StatsTab() {
     { icon: <FileText className="w-4 h-4" />, label: 'Indexed pages (SIP-01)', value: docs?.length, loading: docsLoading },
     { icon: <Database className="w-4 h-4" />, label: 'Cached queries (legacy)', value: cached?.length, loading: cachedLoading },
     { icon: <BarChart3 className="w-4 h-4" />, label: 'Cached results (legacy)', value: cached ? totalCachedResults : undefined, loading: cachedLoading },
-    { icon: <Gem className="w-4 h-4" />, label: 'Keyword stakes (archive)', value: stakes?.length },
+    { icon: <Gem className="w-4 h-4" />, label: 'Npub keyword stakes', value: stakes?.length },
     { icon: <Inbox className="w-4 h-4" />, label: 'Open abuse reports', value: reports?.length },
     { icon: <EyeOff className="w-4 h-4" />, label: 'Hidden targets', value: hidden?.length },
     { icon: <Globe className="w-4 h-4" />, label: 'Index relays (your pool)', value: getIndexRelayUrls().length },
@@ -207,6 +214,78 @@ function StatsTab() {
           </CardContent>
         </Card>
       ))}
+    </div>
+  );
+}
+
+/* ─── Platform keyword staking ─── */
+
+function StakingTab() {
+  const { preAdsEnabled, isLoading } = usePlatformKeywordStaking();
+  const { isAdmin, setPreAdsEnabled } = usePlatformKeywordStakingActions();
+  const { toast } = useToast();
+  const [pending, setPending] = useState(false);
+
+  const handleToggle = async (checked: boolean) => {
+    if (!isAdmin) return;
+    setPending(true);
+    try {
+      await setPreAdsEnabled(checked);
+      toast({
+        title: checked ? 'Keyword staking on' : 'Keyword staking off',
+        description: checked
+          ? 'PRE keyword-staking ads will show on Web and All searches.'
+          : 'Platform PRE ads are hidden for every visitor.',
+      });
+    } catch (err) {
+      toast({
+        title: 'Failed',
+        description: err instanceof Error ? err.message : 'Publish failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className={cn(preAdsEnabled ? 'border-primary/30 bg-primary/5' : 'border-border/60')}>
+        <CardContent className="py-4 flex items-start gap-4">
+          <div className={cn(
+            'flex items-center justify-center w-9 h-9 rounded-lg shrink-0 border',
+            preAdsEnabled ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-muted text-muted-foreground border-border',
+          )}>
+            <Gem className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">Keyword staking (PRE)</span>
+              {isLoading ? (
+                <Skeleton className="h-5 w-9" />
+              ) : (
+                <Switch
+                  checked={preAdsEnabled}
+                  disabled={pending || !isAdmin}
+                  onCheckedChange={(checked) => { void handleToggle(checked); }}
+                  aria-label="Toggle platform keyword staking"
+                />
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Platform slot for PRE community keyword ads. On by default. Visitors cannot
+              turn this off in Settings — only owner and admin keys can publish this flag
+              (kind 30078, <code className="font-mono">presearchstr:keyword-staking</code>).
+              Nostr / npub staking stays a separate, off-by-default user setting.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+      <p className="text-[11px] text-muted-foreground/70 leading-relaxed flex items-start gap-1.5">
+        <Lock className="w-3 h-3 mt-0.5 shrink-0" />
+        The signed event is the source of truth for every client. After publishing, relays
+        may take a few seconds to serve the new flag.
+      </p>
     </div>
   );
 }
