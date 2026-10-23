@@ -191,6 +191,15 @@ does not block organic search.
   events are preserved in [NIP.md](NIP.md). Npubs stay hidden unless the visitor turns
   **Show npubs** on.
 
+### Base payout wallet
+
+The account menu and Settings link a Base address to the logged-in Nostr
+account for payouts. The link is a [NIP-39](https://github.com/nostr-protocol/nips/blob/master/39.md)
+kind 10011 claim, `ethereum:8453:address:0x…`, proved by an EIP-191 signature
+from that wallet. The Nostr key is not reused as an Ethereum key. The wallet
+key stays in the wallet. The signed address is public. Details are in
+[NIP.md](NIP.md).
+
 **Privacy:** eligible Web/All text queries still resolve ads in Privacy Mode.
 Our backend can observe the query and browser IP; its API request to PRE community
 forwards only search text, without the Nostr account, browser cookies, or user IP headers.
