@@ -17,6 +17,7 @@ import {
   Languages, X,
 } from 'lucide-react';
 
+import { KeywordStakingSettings } from '@/components/KeywordStakingSettings';
 import { Layout } from '@/components/Layout';
 import { RelayListManager } from '@/components/RelayListManager';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { useTheme } from '@/hooks/useTheme';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { usePlatformKeywordStaking } from '@/hooks/usePlatformKeywordStaking';
 import { ALL_SOURCE_TABS, DEFAULT_TAB_CONFIG } from '@/lib/sourceTabs';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useSearxngInstances } from '@/hooks/useSearxngInstances';
@@ -294,6 +296,7 @@ const EXPOSURE_ROWS = [
 function PrivacySection() {
   const { config, updateConfig } = useAppContext();
   const privacyMode = config.privacyMode;
+  const keywordStaking = usePlatformKeywordStaking();
 
   return (
     <section className="mb-10">
@@ -324,8 +327,12 @@ function PrivacySection() {
             </div>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               {privacyMode
-                ? 'Active. Nostr organic results; AI disabled. PRE community privacy ads still resolve eligible Web/All queries through the backend.'
-                : 'Off. Enable for Nostr-only organic results with clearnet APIs, proxies, and AI disabled. PRE community privacy ads remain active for eligible Web/All queries.'}
+                ? keywordStaking.enabled
+                  ? 'Active. Nostr organic results; AI disabled. Keyword staking still resolves eligible Web/All queries through the backend.'
+                  : 'Active. Nostr organic results; AI disabled. Keyword staking is off for this platform.'
+                : keywordStaking.enabled
+                  ? 'Off. Enable for Nostr-only organic results with clearnet APIs, proxies, and AI disabled. Keyword staking remains active for eligible Web/All queries.'
+                  : 'Off. Enable for Nostr-only organic results with clearnet APIs, proxies, and AI disabled. Keyword staking is off for this platform.'}
             </p>
           </div>
         </CardContent>
@@ -409,7 +416,7 @@ function PrivacySection() {
         })}
         <div className="px-3 py-2.5 text-xs border-t border-border/40">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium">PRE community privacy ads</span>
+            <span className="font-medium">Keyword staking</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-500/30 text-red-600 dark:text-red-500">
               engine proxy
             </Badge>
@@ -418,10 +425,11 @@ function PrivacySection() {
             </Badge>
           </div>
           <p className="text-muted-foreground/80 leading-relaxed mt-0.5">
-            PRE community (the PRE token community) resolves blockchain keyword ad data from eligible
-            Web/All text queries through our backend, even in Privacy Mode. The API sends only
-            search text, without your Nostr account, browser cookies, or user IP headers.
-            Ad/report links connect your browser directly to PRE community; ad clicks are counted.
+            Keyword staking stays on for eligible Web/All text queries, including in Privacy Mode,
+            unless a team admin turns the platform switch off. PRE community (the PRE token community)
+            resolves the staking words through our backend. The API sends only search text, without
+            your Nostr account, browser cookies, or user IP headers. Ad and report links connect your
+            browser directly to PRE community; clicks are counted. Visitors cannot remove those words.
           </p>
         </div>
         {/* The AI answer layer is opt-in and gets the evidence pack, not
@@ -465,6 +473,7 @@ function IndexingSection() {
   const { toast } = useToast();
   const autoIndex = config.autoIndex;
   const voteWithIdentity = config.voteWithIdentity;
+  const showNpub = config.showNpub;
   const { user } = useCurrentUser();
 
   // Read the device identity once per mount; regenerate bumps this state.
@@ -572,21 +581,35 @@ function IndexingSection() {
               still see IP/timing).
             </p>
 
-            {/* Public key */}
-            <div className="mt-3 flex items-center gap-2">
-              <code className="flex-1 min-w-0 truncate rounded-md bg-muted px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground">
-                {identity.npub}
-              </code>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                onClick={() => void copy(identity.npub, 'Indexing npub')}
-                aria-label="Copy indexing public key"
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </Button>
+            {/* Public key — hidden unless the visitor turns Show npubs on. */}
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span className="text-xs font-medium">Show npub</span>
+              <Switch
+                checked={showNpub}
+                onCheckedChange={(checked) => updateConfig(() => ({ showNpub: checked }))}
+                aria-label="Show indexing npub"
+              />
             </div>
+            {showNpub ? (
+              <div className="mt-3 flex items-center gap-2">
+                <code className="flex-1 min-w-0 truncate rounded-md bg-muted px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground">
+                  {identity.npub}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => void copy(identity.npub, 'Indexing npub')}
+                  aria-label="Copy indexing public key"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
+                Indexing npub is hidden. The same switch lives under Keyword staking → Npub staking.
+              </p>
+            )}
 
             {/* Actions */}
             <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -2135,6 +2158,8 @@ export default function Settings() {
             <LanguageSection />
             <Separator className="mb-10" />
             <PrivacySection />
+            <Separator className="mb-10" />
+            <KeywordStakingSettings />
           </TabsContent>
 
           {/* Engine toggles */}

@@ -28,6 +28,7 @@ import {
   Sparkles, Lock, CheckCircle2, XCircle, KeyRound,
 } from 'lucide-react';
 
+import { KeywordStakingSettings } from '@/components/KeywordStakingSettings';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -148,6 +149,9 @@ function AdminTabs() {
 
   return (
     <Tabs defaultValue="stats">
+      <div className="mb-6">
+        <KeywordStakingSettings variant="admin" />
+      </div>
       <TabsList className="mb-6 flex-wrap h-auto">
         <TabsTrigger value="stats" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Stats</TabsTrigger>
         <TabsTrigger value="reports" className="gap-1.5"><Flag className="w-3.5 h-3.5" />Reports</TabsTrigger>
@@ -183,7 +187,7 @@ function StatsTab() {
     { icon: <FileText className="w-4 h-4" />, label: 'Indexed pages (SIP-01)', value: docs?.length, loading: docsLoading },
     { icon: <Database className="w-4 h-4" />, label: 'Cached queries (legacy)', value: cached?.length, loading: cachedLoading },
     { icon: <BarChart3 className="w-4 h-4" />, label: 'Cached results (legacy)', value: cached ? totalCachedResults : undefined, loading: cachedLoading },
-    { icon: <Gem className="w-4 h-4" />, label: 'Keyword stakes (archive)', value: stakes?.length },
+    { icon: <Gem className="w-4 h-4" />, label: 'Nostr keyword stakes', value: stakes?.length },
     { icon: <Inbox className="w-4 h-4" />, label: 'Open abuse reports', value: reports?.length },
     { icon: <EyeOff className="w-4 h-4" />, label: 'Hidden targets', value: hidden?.length },
     { icon: <Globe className="w-4 h-4" />, label: 'Index relays (your pool)', value: getIndexRelayUrls().length },
