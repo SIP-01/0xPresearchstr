@@ -162,7 +162,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
         <DialogHeader>
           <DialogTitle>Base payout wallet</DialogTitle>
           <DialogDescription>
-            Connect a Base wallet to this Nostr login. Payouts use the signed address. The wallet key stays in the wallet.
+            Add a Base address to your Nostr profile. Paste it here, or connect a wallet to sign the proof.
           </DialogDescription>
         </DialogHeader>
         <BasePayoutWalletCard heading={false} />

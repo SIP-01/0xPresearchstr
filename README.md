@@ -191,12 +191,12 @@ does not block organic search.
 
 ### Base payout wallet
 
-The account menu and Settings link a Base address to the logged-in Nostr
-account for payouts. The link is a [NIP-39](https://github.com/nostr-protocol/nips/blob/master/39.md)
-kind 10011 claim, `ethereum:8453:address:0x…`, proved by an EIP-191 signature
-from that wallet. The Nostr key is not reused as an Ethereum key. The wallet
-key stays in the wallet. The signed address is public. Details are in
-[NIP.md](NIP.md).
+The account menu and Settings save a Base address on the logged-in Nostr
+profile (kind 0 `base_address`). Connecting a wallet can also publish a
+[NIP-39](https://github.com/nostr-protocol/nips/blob/master/39.md) kind 10011
+claim, `ethereum:8453:address:0x…`, proved by an EIP-191 signature. The Nostr
+key is not reused as an Ethereum key. The wallet key stays in the wallet. The
+address is public. Details are in [NIP.md](NIP.md).
 
 **Privacy:** eligible Web/All text queries still resolve ads in Privacy Mode.
 Our backend can observe the query and browser IP; its API request to PRE community

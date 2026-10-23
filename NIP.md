@@ -353,9 +353,14 @@ the event format below remain unchanged for compatible readers.
 
 ## Base payout wallet (NIP-39)
 
-A Nostr login can name the Base address that should receive payouts. This is a
-kind `10011` replaceable identity claim, queried with `authors: [pubkey]`. The
-Base key is not derived from the Nostr key and is never stored here.
+A Nostr login can name the Base address that should receive payouts. The
+address is stored on the kind 0 profile as `base_address` (lowercase `0x` plus
+40 hex characters). Readers query that profile with `authors: [pubkey]`.
+
+When a wallet is available, the same address is also a kind `10011`
+replaceable identity claim. The Base key is not derived from the Nostr key and
+is never stored here. A signed claim wins over a different profile field. Saving
+a new profile address removes a mismatched claim.
 
 ```json
 {

@@ -10,6 +10,8 @@ import {
   checksumAddress,
   parseBasePayoutWallet,
   payoutProofMessage,
+  profileContentWithBaseAddress,
+  readProfileBaseAddress,
   recoverPayoutAddress,
 } from '@/lib/basePayoutWallet';
 
@@ -84,6 +86,17 @@ describe('Base payout wallet', () => {
       ...event,
       tags: [['i', 'ethereum:1:address:0xd8da6bf26964af9d7eed9e03e53415d37aa96045', signature, 'eip191']],
     }, NOSTR_PUBKEY)).toBeNull();
+  });
+
+  it('saves a Base address on the profile and leaves the rest of the metadata', () => {
+    const content = profileContentWithBaseAddress(
+      JSON.stringify({ name: 'alice', about: 'search' }),
+      address.toUpperCase(),
+    );
+    expect(JSON.parse(content)).toMatchObject({ name: 'alice', about: 'search', base_address: address });
+    expect(readProfileBaseAddress(content)).toBe(address);
+    expect(readProfileBaseAddress(profileContentWithBaseAddress(content, null))).toBeNull();
+    expect(readProfileBaseAddress(JSON.stringify({ base_address: 'javascript:alert(1)' }))).toBeNull();
   });
 
   it('removes only the Base payout tag', () => {
