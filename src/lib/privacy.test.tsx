@@ -24,6 +24,9 @@ import { PrecommunityAdCard, PrecommunityAdInvite } from '@/components/Precommun
 import { PrivacyIndicator } from '@/components/PrivacyIndicator';
 import { useAppContext } from '@/hooks/useAppContext';
 import { isPrecommunityQueryEligible, usePrecommunityAd } from '@/hooks/usePrecommunityAd';
+import { KEYWORD_STAKING_D_TAG, resolveKeywordStakingEnabled } from '@/lib/keywordStaking';
+import { OWNER_PUBKEY } from '@/lib/moderation';
+import type { NostrEvent } from '@nostrify/nostrify';
 import type { PrecommunityAd } from '@/lib/precommunity';
 import { PRECOMMUNITY_MARKET_URL } from '@/lib/precommunity';
 import type { SearchResult } from '@/lib/providers/types';
@@ -238,7 +241,7 @@ describe('Precommunity ads', () => {
     const view = render(<PrecommunityAdCard ad={{ ...TEST_AD, headline: '<img src=x onerror=alert(1)>' }} />);
     expect(view.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
     expect(view.container.querySelector('img')).toBeNull();
-    expect(view.getByText('Sponsored · PRE community')).toBeInTheDocument();
+    expect(view.getByText('Keyword staking')).toBeInTheDocument();
     expect(view.getByText('bitcoin.org')).toBeInTheDocument();
     const links = view.getAllByRole('link');
     expect(links[0]).toHaveAttribute('href', TEST_AD.clickUrl);
@@ -289,8 +292,8 @@ describe('Precommunity ads', () => {
     await waitFor(() => expect(view.getByRole('article')).toBeInTheDocument());
     expect(requests).toEqual(['bitcoin']);
     fireEvent.click(view.getByLabelText('Privacy status: Nostr. Click for details.'));
-    expect(view.getByText('Nostr handles organic search. AI is off; PRE community privacy ads remain enabled.')).toBeInTheDocument();
-    expect(view.getByText('PRE community privacy ads')).toBeInTheDocument();
+    expect(view.getByText('Nostr handles organic search. AI is off; keyword staking remains enabled.')).toBeInTheDocument();
+    expect(view.getAllByText('Keyword staking').length).toBeGreaterThan(0);
     expect(view.getByText(/PRE community, the community around the PRE token, resolves blockchain keyword ads from your query through our backend/)).toBeInTheDocument();
     expect(view.getByText(/No Nostr account or browser cookies are sent/)).toBeInTheDocument();
     expect(view.queryByText(/It sees your query and IP/)).toBeNull();
@@ -339,9 +342,9 @@ describe('Precommunity ads', () => {
     await waitFor(() => expect(requests).toEqual(['tesla']));
     expect(view.queryByRole('complementary')).toBeNull();
     await act(async () => { finish?.(Response.json({ ad: null })); });
-    await waitFor(() => expect(view.getByRole('complementary', { name: 'Advertise on PRE community' })).toBeInTheDocument());
-    expect(view.getByText('Promote your website for “tesla” on the Keyword Marketplace.')).toBeInTheDocument();
-    expect(view.getByRole('link', { name: 'Advertise on PRE community' })).toHaveAttribute('href', PRECOMMUNITY_MARKET_URL);
+    await waitFor(() => expect(view.getByRole('complementary', { name: 'Keyword staking' })).toBeInTheDocument());
+    expect(view.getByText('Promote your website for “tesla” with keyword staking.')).toBeInTheDocument();
+    expect(view.getByRole('link', { name: 'Keyword staking' })).toHaveAttribute('href', PRECOMMUNITY_MARKET_URL);
     fireEvent.click(view.getByText('Next page'));
     fireEvent.change(view.getByLabelText('Ad source'), { target: { value: 'all' } });
     expect(requests).toEqual(['tesla']);
@@ -358,7 +361,7 @@ describe('Precommunity ads', () => {
   it('escapes the keyword in the invitation and uses a fixed marketplace link', () => {
     const keyword = '<img src=x onerror=alert(1)>';
     const view = render(<PrecommunityAdInvite keyword={keyword} />);
-    expect(view.getByText(`Promote your website for “${keyword}” on the Keyword Marketplace.`)).toBeInTheDocument();
+    expect(view.getByText(`Promote your website for “${keyword}” with keyword staking.`)).toBeInTheDocument();
     expect(view.container.querySelector('img')).toBeNull();
     expect(view.getByRole('link')).toHaveAttribute('href', PRECOMMUNITY_MARKET_URL);
     expect(view.getByRole('link')).toHaveAttribute('rel', 'noopener noreferrer');
@@ -376,5 +379,45 @@ describe('Precommunity ads', () => {
     await waitFor(() => expect(requests).toEqual(['bitcoin', 'tesla']));
     await waitFor(() => expect(view.getByRole('complementary')).toBeInTheDocument());
     expect(view.queryByRole('article')).toBeNull();
+  });
+});
+
+function stakingSwitch(enabled: boolean, overrides: Partial<NostrEvent> = {}): NostrEvent {
+  return {
+    id: overrides.id ?? 'switch-a',
+    pubkey: overrides.pubkey ?? OWNER_PUBKEY,
+    kind: overrides.kind ?? 30078,
+    created_at: overrides.created_at ?? 10,
+    sig: 'sig',
+    content: overrides.content ?? JSON.stringify({ enabled }),
+    tags: overrides.tags ?? [
+      ['d', KEYWORD_STAKING_D_TAG],
+      ['alt', enabled ? 'Keyword staking is on' : 'Keyword staking is off'],
+    ],
+  };
+}
+
+describe('platform keyword staking switch', () => {
+  const stranger = 'a'.repeat(64);
+
+  it('stays on when no trusted event exists', () => {
+    expect(resolveKeywordStakingEnabled([], [OWNER_PUBKEY])).toBe(true);
+  });
+
+  it('ignores a switch signed by anyone outside the admin set', () => {
+    const event = stakingSwitch(false, { pubkey: stranger });
+    expect(resolveKeywordStakingEnabled([event], [OWNER_PUBKEY])).toBe(true);
+  });
+
+  it('lets the newest trusted admin event turn staking off', () => {
+    const olderOn = stakingSwitch(true, { id: 'b', created_at: 10 });
+    const newerOff = stakingSwitch(false, { id: 'a', pubkey: stranger, created_at: 20 });
+    expect(resolveKeywordStakingEnabled([olderOn, newerOff], [OWNER_PUBKEY, stranger])).toBe(false);
+  });
+
+  it('ignores a malformed payload and a lookalike d-tag', () => {
+    const junk = stakingSwitch(false, { content: '{"enabled":"false"}' });
+    const lookalike = stakingSwitch(false, { tags: [['d', 'presearchstr:keyword-staking-fake']] });
+    expect(resolveKeywordStakingEnabled([junk, lookalike], [OWNER_PUBKEY])).toBe(true);
   });
 });

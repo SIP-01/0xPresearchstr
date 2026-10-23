@@ -9,7 +9,8 @@ This engine's identity is explicit and centralized in
 |---|---|---|
 | SIP-01 observations (kind 39697) | `widx:*` (SIP-01 spec) | **Protocol data — shared with every SIP-01 client** |
 | Legacy query cache (kind 30078) | `0xsearchstr:cache:*` | Fork-family federation (frozen, read-only here) |
-| Keyword stakes (kind 30078) | `0xsearchstr:stake:*` | Historical fork-family data — read by Explore and admin statistics; search placement retired |
+| Keyword stakes (kind 30078) | `0xsearchstr:stake:*` | Historical fork-family data — Nostr keyword staking and npub staking, read by Explore and admin statistics; search placement retired; npubs hidden in the UI unless the visitor opts in |
+| **Keyword staking switch** (kind 30078) | `presearchstr:keyword-staking` | **This engine only** — owner and admin pubkeys; missing event means PRE keyword staking stays on |
 | Community submissions (kind 30078) | `0xsearchstr:submit:*` | Fork-family federation |
 | Term signals (kind 30078) | `0xsearchstr:term:*` / `0xsearchstr:term-reveal:*` | Fork-family federation (hashed k-anonymity) |
 | **Moderation labels** (NIP-32, kind 1985) | `presearchstr.moderation` | **This engine only** — trusted authors are this app's owner + role lists |
@@ -264,9 +265,49 @@ plaintext (its user just typed it) and publishes:
 
 ---
 
+## Keyword staking switch (kind 30078)
+
+PRE keyword staking — the search placement resolved from PRE community — is on
+for every visitor unless a team admin turns it off. The switch is addressable
+application data. Readers trust the owner pubkey and pubkeys on the
+owner-signed admin list. Anyone else's copy of this d-tag is ignored. When no
+trusted event exists, keyword staking stays **on**.
+
+Nostr keyword staking (`0xsearchstr:stake:*`) and the npub that signs each of
+those stakes are a separate archive. This switch does not delete them, and it
+does not reveal npubs. The visitor's **Show npubs** preference is local and
+defaults to hidden.
+
+```json
+{
+  "kind": 30078,
+  "pubkey": "<owner or admin pubkey>",
+  "content": "{\"enabled\": true}",
+  "tags": [
+    ["d", "presearchstr:keyword-staking"],
+    ["t", "presearchstr-keyword-staking"],
+    ["alt", "Keyword staking is on"]
+  ]
+}
+```
+
+`content.enabled` must be a boolean. The newest trusted event wins
+(`created_at`, then lower event id). Visitors cannot publish a switch other
+clients will honor.
+
+```json
+{
+  "kinds": [30078],
+  "authors": ["<owner pubkey>", "<admin pubkey>"],
+  "#d": ["presearchstr:keyword-staking"]
+}
+```
+
+---
+
 ## Keyword Stakes (kind 30078) — historical archive
 
-This preserved schema describes the former Nostr-native keyword staking feature:
+This preserved schema describes Nostr keyword staking and npub staking:
 an addressable event bound a normalized keyword to a URL, signed by the staker's
 identity. Presearchstr no longer publishes stakes or uses them for search placement.
 Existing events remain readable in the Explore archive and administrator statistics.

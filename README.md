@@ -150,35 +150,43 @@ re-hash the plaintext and compare). Rare queries do not appear as plaintext tren
 events, and sensitive query classes (NIP-19 ids, NIP-05 addresses, URLs,
 math) are never signaled at all. See [NIP.md](NIP.md).
 
-### PRE community Privacy Ads
+### Keyword staking
 
 PRE community, the community around the PRE token, resolves blockchain keyword
-ad data through our backend using only the search query. Submitted text searches can display one
-**Sponsored · PRE community** card in **Web**
+stakes through our backend using only the search query. Submitted text searches can display one
+**Keyword staking** card in **Web**
 and **All**, below any instant or AI answers and above organic results. Keyword
-advertising is managed at [Precommunity Keyword Market](https://precommunity.org/keyword-market).
+staking is managed at [Precommunity Keyword Market](https://precommunity.org/keyword-market).
+
+The placement is **on by default**. PRE staking words are a platform setting:
+visitors cannot turn them off. Team admins (the owner key, or a pubkey on the
+owner-signed admin list) publish a kind 30078 switch,
+`presearchstr:keyword-staking`. A missing event means keyword staking stays on.
+Nostr keyword staking and npub staking remain in Explore; staker npubs and the
+device indexing npub stay hidden until **Show npubs** is turned on in Settings.
 
 The browser calls `GET /api/ads/precommunity?q=…` on the engine backend. The worker
 calls Precommunity's resolve API with a server-only `KEYWORD_MARKET_API_KEY` and
 returns `{ ad: PrecommunityAd | null }`. An ad has `headline`, `description`, `url`,
 `clickUrl`, and `reportUrl` fields. When a lookup completes with `ad: null` or an
-error, the card instead shows **Your ad could be here**, inviting website promotion
-for the submitted query with an **Advertise on PRE community** link to the Keyword
+error, the card instead shows **Stake this keyword**, inviting website promotion
+for the submitted query with a **Keyword staking** link to the Keyword
 Marketplace. This invitation does not assert that the keyword is available and
 does not block organic search.
 
 - Ads are independent of result counts, ranking, votes, Nostr indexing, and AI evidence.
 - Pagination and switching between Web and All retain the same ad for the submitted query.
-- PRE community advertising is an explicit Privacy Mode exception: eligible submitted
+- Keyword staking is an explicit Privacy Mode exception: eligible submitted
   text searches in Web and All still resolve ads and show ads or marketplace invitations.
   Organic search uses Nostr-tier providers only and AI answers remain disabled in this mode.
   The invitation stays hidden during the initial lookup, on other tabs, and for
   special query classes (NIP-19, NIP-05, URLs, and math), which do not resolve ads.
 - Ad clicks open `clickUrl` in a new tab; reports open `reportUrl`. All links require
   HTTPS, and click/report links are restricted to `precommunity.org`.
-- Historical Nostr keyword stakes remain in **Explore → Keyword Stakes Archive** and
+- Nostr keyword staking and npub staking remain in **Explore → Nostr keyword staking** and
   admin statistics. They no longer receive search placement; their schema and existing
-  events are preserved in [NIP.md](NIP.md).
+  events are preserved in [NIP.md](NIP.md). Npubs stay hidden unless the visitor turns
+  **Show npubs** on.
 
 **Privacy:** eligible Web/All text queries still resolve ads in Privacy Mode.
 Our backend can observe the query and browser IP; its API request to PRE community

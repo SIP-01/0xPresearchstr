@@ -194,7 +194,7 @@ export function useAbuseReports() {
  * publish role lists nobody ever sees (the "added a mod but they can't see
  * the dashboard" bug).
  */
-async function publishTeamEvent(
+export async function publishTeamEvent(
   user: NonNullable<ReturnType<typeof useCurrentUser>['user']>,
   template: { kind: number; content: string; tags: string[][] },
 ): Promise<void> {

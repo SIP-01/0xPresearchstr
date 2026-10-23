@@ -7,11 +7,13 @@
  *   2. Trending searches — hashed term signals (kind 30078): a term's
  *      plaintext only becomes visible once 3+ independent devices searched
  *      it, so nobody's confidential query ever appears here;
- *   3. Archived keyword stakes — historical Nostr entries, no search placement.
+ *   3. Nostr keyword staking — historical npub-signed stakes, no search placement.
+ *      Staker npubs stay hidden unless Settings → Show npubs is on.
  * Clicking any query starts a fresh search using the current search settings.
  */
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
+import { nip19 } from 'nostr-tools';
 import { Compass, Search, TrendingUp, Clock, ArrowRight, Gem, FileText, Users } from 'lucide-react';
 
 import { Layout } from '@/components/Layout';
@@ -22,6 +24,7 @@ import { useTrendingTerms, type TrendingTerm } from '@/hooks/useTrendingTerms';
 import { useRecentStakes, type StakeEntry } from '@/hooks/useRecentStakes';
 import { useRecentIndexedDocs, type IndexedDocEntry } from '@/hooks/useRecentIndexedDocs';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
+import { useAppContext } from '@/hooks/useAppContext';
 
 function timeAgo(timestamp: number): string {
   const diff = Math.floor(Date.now() / 1000) - timestamp;
@@ -34,11 +37,12 @@ function timeAgo(timestamp: number): string {
 export default function Explore() {
   const { data: entries, isLoading } = useTrendingTerms();
   const { data: stakes } = useRecentStakes();
+  const { config } = useAppContext();
   const { data: docs, isLoading: docsLoading } = useRecentIndexedDocs();
 
   useSeoMeta({
     title: 'Explore the Index - Presearchstr',
-    description: 'Browse trending searches, archived keyword stakes, and recently indexed pages from the shared Nostr web index.',
+    description: 'Browse trending searches, Nostr keyword staking, and recently indexed pages from the shared Nostr web index.',
   });
 
   return (
@@ -53,7 +57,7 @@ export default function Explore() {
         </div>
         <p className="text-muted-foreground mb-8 leading-relaxed max-w-2xl">
           Every search on Presearchstr grows a shared index on Nostr. Recently indexed pages,
-          trending searches, and archived keyword stakes — all of it straight from relays,
+          trending searches, and Nostr keyword staking — all of it straight from relays,
           signed by the community.
         </p>
 
@@ -180,16 +184,17 @@ export default function Explore() {
           <>
             <div className="flex items-center gap-2 mt-10 mb-4">
               <Gem className="w-4 h-4 text-primary" />
-              <h2 className="text-lg font-semibold tracking-tight">Keyword Stakes Archive</h2>
+              <h2 className="text-lg font-semibold tracking-tight">Nostr keyword staking</h2>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               {stakes.slice(0, 10).map((stake) => (
-                <StakeCard key={`${stake.staker}:${stake.keyword.toLowerCase()}`} stake={stake} />
+                <StakeCard key={`${stake.staker}:${stake.keyword.toLowerCase()}`} stake={stake} showNpub={config.showNpub} />
               ))}
             </div>
             <p className="text-xs text-muted-foreground/60 mt-3 leading-relaxed">
-              Historical stakes signed by their authors&apos; Nostr keys. These entries no longer
-              receive search placement. Current keyword advertising is managed at{' '}
+              Npub staking stays here: each stake is signed by its author&apos;s Nostr key.
+              {config.showNpub ? ' Staker npubs are visible.' : ' Staker npubs stay hidden.'}
+              {' '}Search placement is PRE keyword staking. The marketplace is{' '}
               <a href="https://precommunity.org/keyword-market" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
                 Precommunity
               </a>.
@@ -255,9 +260,10 @@ function DocCard({ doc }: { doc: IndexedDocEntry }) {
   );
 }
 
-function StakeCard({ stake }: { stake: StakeEntry }) {
+function StakeCard({ stake, showNpub }: { stake: StakeEntry; showNpub: boolean }) {
   let domain = stake.url;
   try { domain = new URL(stake.url).hostname.replace(/^www\./, ''); } catch { /* magnet:/ipfs: etc. */ }
+  const npub = showNpub && /^[0-9a-f]{64}$/i.test(stake.staker) ? nip19.npubEncode(stake.staker) : '';
 
   return (
     <Link to={`/?q=${encodeURIComponent(stake.keyword)}`} className="group block">
@@ -272,6 +278,14 @@ function StakeCard({ stake }: { stake: StakeEntry }) {
                 <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/30 text-primary">
                   {domain}
                 </Badge>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                  Npub staking
+                </Badge>
+                {npub && (
+                  <span className="text-[11px] font-mono text-muted-foreground">
+                    {npub.slice(0, 12)}…{npub.slice(-4)}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60">
                   <Clock className="w-3 h-3" />
                   {timeAgo(stake.stakedAt)}

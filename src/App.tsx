@@ -49,6 +49,7 @@ const defaultConfig: AppConfig = {
   autoIndex: true,
   tabConfig: DEFAULT_TAB_CONFIG,
   voteWithIdentity: false,
+  showNpub: false,
   // Engines off by default (speed + principle of least surprise):
   //   brave         — BYOK; dormant until the user adds their own key anyway
   //   parallel      — BYOK; dormant until the user adds their own key anyway
