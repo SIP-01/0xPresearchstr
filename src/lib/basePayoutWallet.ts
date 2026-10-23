@@ -26,7 +26,12 @@ export interface BasePayoutWallet {
   address: string;
   signature: string;
   chainId: typeof BASE_CHAIN_ID;
+  /** True when an EIP-191 proof recovers to this address. */
+  verified: boolean;
 }
+
+/** Kind 0 profile field for the Base payout address. */
+export const PROFILE_BASE_ADDRESS_KEY = 'base_address';
 
 interface RecoveredPoint {
   toBytes(compressed?: boolean): Uint8Array;
@@ -59,7 +64,8 @@ function concatBytes(parts: Uint8Array[]): Uint8Array {
 }
 
 export function normalizeAddress(value: string): string | null {
-  const address = value.trim();
+  const trimmed = value.trim();
+  const address = trimmed.slice(0, 2).toLowerCase() === '0x' ? `0x${trimmed.slice(2)}` : trimmed;
   if (!ADDRESS_RE.test(address)) return null;
   const lowercase = address.toLowerCase();
   if (lowercase === `0x${'0'.repeat(40)}`) return null;
@@ -186,7 +192,41 @@ export function parseBasePayoutWallet(event: NostrEvent | undefined, pubkey: str
     const address = normalizeAddress(identity.slice(IDENTITY_PREFIX.length));
     const signature = (tag[2] ?? '').toLowerCase();
     if (!address || recoverPayoutAddress(pubkey, address, signature) !== address) continue;
-    return { address, signature: signature.replace(/^0x/, ''), chainId: BASE_CHAIN_ID };
+    return { address, signature: signature.replace(/^0x/, ''), chainId: BASE_CHAIN_ID, verified: true };
   }
   return null;
+}
+
+function profileRecord(content: string | undefined): Record<string, unknown> {
+  if (!content) return {};
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return { ...(parsed as Record<string, unknown>) };
+    }
+  } catch {
+    return {};
+  }
+  return {};
+}
+
+/** Read the Base address stored on a kind 0 profile. */
+export function readProfileBaseAddress(content: string | undefined): string | null {
+  const raw = profileRecord(content)[PROFILE_BASE_ADDRESS_KEY];
+  return typeof raw === 'string' ? normalizeAddress(raw) : null;
+}
+
+/** Merge a Base address into kind 0 content without dropping the rest of the profile. */
+export function profileContentWithBaseAddress(content: string, address: string | null): string {
+  const meta = profileRecord(content);
+  const normalized = address ? normalizeAddress(address) : null;
+  if (normalized) meta[PROFILE_BASE_ADDRESS_KEY] = normalized;
+  else delete meta[PROFILE_BASE_ADDRESS_KEY];
+  return JSON.stringify(meta);
+}
+
+export function profilePayoutWallet(address: string): BasePayoutWallet | null {
+  const normalized = normalizeAddress(address);
+  if (!normalized) return null;
+  return { address: normalized, signature: '', chainId: BASE_CHAIN_ID, verified: false };
 }

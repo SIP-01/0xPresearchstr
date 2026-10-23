@@ -3,6 +3,8 @@ import { ExternalLink, Wallet } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBasePayoutWallet } from '@/hooks/useBasePayoutWallet';
@@ -11,11 +13,13 @@ import { discoverWallets, type DiscoveredWallet } from '@/lib/basePayoutProvider
 import { baseAddressUrl, checksumAddress, shortPayoutAddress } from '@/lib/basePayoutWallet';
 
 function statusMessage(error: unknown): string {
-  if (error instanceof Error) {
-    const message = error.message.replace(/\s+/g, ' ').trim();
-    if (message.length > 0 && message.length <= 180) return message;
-  }
-  return 'The wallet could not link a Base address.';
+  let message = '';
+  if (error instanceof Error) message = error.message;
+  else if (typeof error === 'string') message = error;
+  else if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') message = error.message;
+  const cleaned = message.replace(/\s+/g, ' ').trim();
+  if (cleaned.length > 0 && cleaned.length <= 180) return cleaned;
+  return 'The Base address could not be saved.';
 }
 
 export function BasePayoutWalletCard({ heading = true }: { heading?: boolean }) {
@@ -24,8 +28,32 @@ export function BasePayoutWalletCard({ heading = true }: { heading?: boolean }) 
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const [choices, setChoices] = useState<DiscoveredWallet[] | null>(null);
+  const [draft, setDraft] = useState<string | null>(null);
+  const fieldId = heading ? 'base-payout-address' : 'base-payout-address-dialog';
+  const helpId = `${fieldId}-help`;
   const linked = wallet.data;
   const explorer = linked ? baseAddressUrl(linked.address) : null;
+  const addressValue = draft ?? (linked ? checksumAddress(linked.address) : '');
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const next = await wallet.saveToProfile(addressValue);
+      setDraft(null);
+      toast({
+        title: 'Base address saved on your profile',
+        description: `${shortPayoutAddress(next.address)} can receive payouts.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Could not save the Base address',
+        description: statusMessage(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const connect = async (provider?: DiscoveredWallet['provider']) => {
     setBusy(true);
@@ -86,7 +114,7 @@ export function BasePayoutWalletCard({ heading = true }: { heading?: boolean }) 
         <>
           <h2 className="text-sm font-semibold mb-1">Base payout wallet</h2>
           <p className="text-xs text-muted-foreground mb-4">
-            Link the Base address that should receive payouts for this Nostr account.
+            Add the Base address that should receive payouts. It is saved on your Nostr profile.
           </p>
         </>
       )}
@@ -98,7 +126,7 @@ export function BasePayoutWalletCard({ heading = true }: { heading?: boolean }) 
           <div className="flex-1 min-w-0 space-y-3">
             {!user && (
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Log in, then connect a Base wallet from the account menu. The wallet signs a public proof. Its key stays in the wallet.
+                Log in, then paste a Base address here. It is saved on your Nostr profile. Connecting a wallet can also sign the proof. The wallet key stays in the wallet.
               </p>
             )}
             {user && wallet.isPending && (
@@ -107,25 +135,39 @@ export function BasePayoutWalletCard({ heading = true }: { heading?: boolean }) 
                 <Skeleton className="h-3 w-full" />
               </div>
             )}
-            {user && !wallet.isPending && linked && explorer && (
+            {user && !wallet.isPending && (
               <div className="space-y-2">
-                <p className="text-sm font-medium">Payouts go to this Base address</p>
-                <p className="font-mono text-sm break-all">{checksumAddress(linked.address)}</p>
-                <a
-                  href={explorer}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:underline decoration-2 underline-offset-4"
-                >
-                  View on Base
-                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                </a>
+                <Label htmlFor={fieldId}>Base address</Label>
+                <Input
+                  id={fieldId}
+                  value={addressValue}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="0x…"
+                  autoComplete="off"
+                  spellCheck={false}
+                  inputMode="text"
+                  aria-describedby={helpId}
+                  className="font-mono"
+                />
+                <p id={helpId} className="text-xs text-muted-foreground leading-relaxed">
+                  {linked
+                    ? linked.verified
+                      ? 'Signed by this wallet and saved on your profile.'
+                      : 'Saved on your Nostr profile.'
+                    : 'Paste the address from your Base wallet, then save it to your profile.'}
+                </p>
+                {linked && explorer && (
+                  <a
+                    href={explorer}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:underline decoration-2 underline-offset-4"
+                  >
+                    View on Base
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  </a>
+                )}
               </div>
-            )}
-            {user && !wallet.isPending && !linked && (
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                No Base address is linked yet. Connect a wallet on Base. It signs a proof that this address belongs to your Nostr account. Presearchstr never receives the wallet key.
-              </p>
             )}
             {user && choices && choices.length > 1 && (
               <div className="flex flex-wrap gap-2">
@@ -145,8 +187,11 @@ export function BasePayoutWalletCard({ heading = true }: { heading?: boolean }) 
             )}
             {user && !wallet.isPending && (
               <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" disabled={busy} onClick={() => { void connect(); }}>
-                  {linked ? 'Replace Base wallet' : 'Connect Base wallet'}
+                <Button type="button" size="sm" disabled={busy} onClick={() => { void save(); }}>
+                  Save to profile
+                </Button>
+                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { void connect(); }}>
+                  Connect wallet
                 </Button>
                 {linked && (
                   <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { void remove(); }}>

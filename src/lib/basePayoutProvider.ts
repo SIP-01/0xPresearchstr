@@ -57,26 +57,40 @@ function hexMessage(message: string): string {
 
 async function ensureBaseChain(provider: Eip1193Provider): Promise<void> {
   try {
-    await provider.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: BASE_CHAIN_HEX }],
-    });
+    await walletRequest(provider, 'wallet_switchEthereumChain', [{ chainId: BASE_CHAIN_HEX }]);
   } catch (error) {
-    if (isUserRejected(error)) throw new Error('The wallet request was dismissed.', { cause: error });
+    if (error instanceof Error && error.message === 'The wallet request was dismissed.') throw error;
     try {
-      await provider.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
+      await walletRequest(provider, 'wallet_addEthereumChain', [{
           chainId: BASE_CHAIN_HEX,
           chainName: 'Base',
           nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
           rpcUrls: ['https://mainnet.base.org'],
           blockExplorerUrls: ['https://basescan.org'],
         }],
-      });
+      );
     } catch (addError) {
-      if (isUserRejected(addError)) throw new Error('The wallet request was dismissed.', { cause: addError });
+      if (addError instanceof Error && addError.message === 'The wallet request was dismissed.') throw addError;
     }
+  }
+}
+
+function readableWalletError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && error.message.trim()) {
+    return error.message.trim();
+  }
+  return '';
+}
+
+async function walletRequest(provider: Eip1193Provider, method: string, params?: readonly unknown[]): Promise<unknown> {
+  try {
+    return await provider.request(params ? { method, params } : { method });
+  } catch (error) {
+    if (isUserRejected(error)) throw new Error('The wallet request was dismissed.', { cause: error });
+    const message = readableWalletError(error);
+    throw new Error(message || 'The wallet could not return a Base address.', { cause: error });
   }
 }
 
@@ -134,10 +148,10 @@ export async function requestBasePayoutProof(
   provider: Eip1193Provider,
   nostrPubkey: string,
 ): Promise<{ address: string; signature: string }> {
-  const requested = firstAddress(await provider.request({ method: 'eth_requestAccounts' }));
+  const requested = firstAddress(await walletRequest(provider, 'eth_requestAccounts'));
   if (!requested) throw new Error('The wallet did not return a Base address.');
   await ensureBaseChain(provider);
-  const selected = firstAddress(await provider.request({ method: 'eth_accounts' })) ?? requested;
+  const selected = firstAddress(await walletRequest(provider, 'eth_accounts')) ?? requested;
   let npub: string;
   try {
     npub = nip19.npubEncode(nostrPubkey);
@@ -145,10 +159,7 @@ export async function requestBasePayoutProof(
     throw new Error('This Nostr account cannot be linked.', { cause: error });
   }
   const message = payoutProofMessage(npub, selected);
-  const signed = await provider.request({
-    method: 'personal_sign',
-    params: [hexMessage(message), checksumAddress(selected)],
-  });
+  const signed = await walletRequest(provider, 'personal_sign', [hexMessage(message), checksumAddress(selected)]);
   if (typeof signed !== 'string') throw new Error('The wallet did not return a signature.');
   const signature = signed.toLowerCase().replace(/^0x/, '');
   if (recoverPayoutAddress(nostrPubkey, selected, signature) !== selected) {
