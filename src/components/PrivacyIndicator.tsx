@@ -140,8 +140,9 @@ export function PrivacyIndicator({ source, precommunityEligible = false, classNa
               <div className="min-w-0">
                 <span className="text-xs font-medium text-foreground">Keyword staking</span>
                 <p className="text-[11px] text-muted-foreground/80 leading-snug">
-                  PRE community, the community around the PRE token, resolves blockchain keyword ads from your query through our backend.
-                  No Nostr account or browser cookies are sent. Clicks are counted.
+                  PRE community, the community around the PRE token, publishes the staked keyword for this search.
+                  A counted ad creative, when the engine backend has one, is resolved through our backend.
+                  No Nostr account or browser cookies are sent with that backend request. Clicks are counted.
                 </p>
               </div>
             </div>

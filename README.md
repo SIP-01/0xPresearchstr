@@ -165,12 +165,15 @@ owner-signed admin list) publish a kind 30078 switch,
 Nostr keyword staking and npub staking remain in Explore; staker npubs and the
 device indexing npub stay hidden until **Show npubs** is turned on in Settings.
 
-The browser calls `GET /api/ads/precommunity?q=…` on the engine backend. The worker
+The browser also reads the public keyword ledger at
+`GET https://precommunity.org/api/v1/keyword-market/keywords/{query}`.
+A synced eligible stake, such as Bitcoin, is shown from that ledger even when
+the ad proxy has no creative. The browser calls `GET /api/ads/precommunity?q=…` on the engine backend for the counted creative. The worker
 calls Precommunity's resolve API with a server-only `KEYWORD_MARKET_API_KEY` and
 returns `{ ad: PrecommunityAd | null }`. An ad has `headline`, `description`, `url`,
-`clickUrl`, and `reportUrl` fields. When a lookup completes with `ad: null` or an
-error, the card instead shows **Stake this keyword**, inviting website promotion
-for the submitted query with a **Keyword staking** link to the Keyword
+`clickUrl`, and `reportUrl` fields. When the ledger has no eligible stake and the
+creative lookup completes with `ad: null` or an error, the card shows **Stake this keyword**,
+inviting website promotion for the submitted query with a **Keyword staking** link to the Keyword
 Marketplace. This invitation does not assert that the keyword is available and
 does not block organic search.
 

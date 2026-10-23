@@ -20,15 +20,15 @@ import { sanitizeUrl, sanitizeResultUrl, sanitizePublicUrl } from '@/lib/sanitiz
 import { ALL_PROVIDERS, getProvidersForPrivacy } from '@/lib/providers/registry';
 import { TestApp } from '@/test/TestApp';
 import { UnifiedResultCard } from '@/components/UnifiedResultCard';
-import { PrecommunityAdCard, PrecommunityAdInvite } from '@/components/PrecommunityAdCard';
+import { PrecommunityAdCard, PrecommunityAdInvite, PublicKeywordStakeCard } from '@/components/PrecommunityAdCard';
 import { PrivacyIndicator } from '@/components/PrivacyIndicator';
 import { useAppContext } from '@/hooks/useAppContext';
-import { isPrecommunityQueryEligible, usePrecommunityAd } from '@/hooks/usePrecommunityAd';
+import { isPrecommunityQueryEligible, usePrecommunityAd, usePublicKeywordStake } from '@/hooks/usePrecommunityAd';
 import { KEYWORD_STAKING_D_TAG, resolveKeywordStakingEnabled } from '@/lib/keywordStaking';
 import { OWNER_PUBKEY } from '@/lib/moderation';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { PrecommunityAd } from '@/lib/precommunity';
-import { PRECOMMUNITY_MARKET_URL } from '@/lib/precommunity';
+import { PRECOMMUNITY_MARKET_URL, parsePublicKeyword } from '@/lib/precommunity';
 import type { SearchResult } from '@/lib/providers/types';
 
 afterEach(() => {
@@ -189,6 +189,8 @@ function AdHarness({ initialQuery = 'bitcoin', initialSource = 'web' }: {
   const { config, updateConfig } = useAppContext();
   const eligible = (source === 'web' || source === 'all') && isPrecommunityQueryEligible(query);
   const adQuery = usePrecommunityAd(query, eligible);
+  const stakeQuery = usePublicKeywordStake(query, eligible);
+  const settled = !adQuery.isPending && !stakeQuery.isPending;
   return (
     <>
       <input aria-label="Ad query" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -202,11 +204,9 @@ function AdHarness({ initialQuery = 'bitcoin', initialSource = 'web' }: {
       <button onClick={() => updateConfig(() => ({ privacyMode: !config.privacyMode }))}>Toggle privacy</button>
       <button onClick={() => updateConfig(() => ({ disabledProviders: ALL_PROVIDERS.map((provider) => provider.id) }))}>Disable engines</button>
       <PrivacyIndicator source={source === 'all' ? 'all' : 'web'} precommunityEligible={eligible} />
-      {eligible && !adQuery.isPending && (
-        adQuery.data?.ad
-          ? <PrecommunityAdCard ad={adQuery.data.ad} />
-          : <PrecommunityAdInvite keyword={query} />
-      )}
+      {eligible && adQuery.data?.ad && <PrecommunityAdCard ad={adQuery.data.ad} stake={stakeQuery.data} />}
+      {eligible && !adQuery.data?.ad && stakeQuery.data && <PublicKeywordStakeCard stake={stakeQuery.data} />}
+      {eligible && settled && !adQuery.data?.ad && !stakeQuery.data && <PrecommunityAdInvite keyword={query} />}
     </>
   );
 }
@@ -294,7 +294,7 @@ describe('Precommunity ads', () => {
     fireEvent.click(view.getByLabelText('Privacy status: Nostr. Click for details.'));
     expect(view.getByText('Nostr handles organic search. AI is off; keyword staking remains enabled.')).toBeInTheDocument();
     expect(view.getAllByText('Keyword staking').length).toBeGreaterThan(0);
-    expect(view.getByText(/PRE community, the community around the PRE token, resolves blockchain keyword ads from your query through our backend/)).toBeInTheDocument();
+    expect(view.getByText(/PRE community, the community around the PRE token, publishes the staked keyword for this search/)).toBeInTheDocument();
     expect(view.getByText(/No Nostr account or browser cookies are sent/)).toBeInTheDocument();
     expect(view.queryByText(/It sees your query and IP/)).toBeNull();
     expect(view.getByText('Blocked by Privacy Mode')).toBeInTheDocument();
@@ -396,6 +396,52 @@ function stakingSwitch(enabled: boolean, overrides: Partial<NostrEvent> = {}): N
     ],
   };
 }
+
+const BITCOIN_LEDGER = {
+  keyword: 'bitcoin',
+  chainStatus: 'SYNCED',
+  chainId: 8453,
+  contractAddress: '0xf1176055f53cbd47c7c76515b14315252f57077e',
+  positions: [{
+    rank: 1,
+    stakerAddress: '0x27665b38dea6a3f51066b5e3c4904fecc43c7083',
+    stakeRaw: '964060706380324165085',
+    bidUsdRaw: '10000',
+    eligible: true,
+    hasEligibleAd: true,
+    positionTxHash: '0x1fd5450738c7446e3049953002392db660e98bace363a2b6a8ae344c47f2c5d6',
+  }],
+};
+
+describe('public PRE keyword ledger', () => {
+  it('shows the on-chain keyword when the ad proxy has no creative', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'https://test.example');
+      if (url.pathname.endsWith('/keywords/bitcoin')) return Promise.resolve(Response.json(BITCOIN_LEDGER));
+      return Promise.resolve(new Response('', { status: 503 }));
+    }));
+    const view = render(<TestApp><AdHarness /></TestApp>);
+    await waitFor(() => expect(view.getByRole('heading', { name: 'bitcoin' })).toBeInTheDocument());
+    expect(view.getByText(/964\.0607 PRE staked · rank #1 · \$0\.01 per click/)).toBeInTheDocument();
+    expect(view.getByRole('link')).toHaveAttribute(
+      'href',
+      'https://basescan.org/tx/0x1fd5450738c7446e3049953002392db660e98bace363a2b6a8ae344c47f2c5d6',
+    );
+    expect(view.queryByRole('complementary')).toBeNull();
+  });
+
+  it('drops ineligible positions and refuses a non-transaction hash', () => {
+    expect(parsePublicKeyword({
+      ...BITCOIN_LEDGER,
+      positions: [{ ...BITCOIN_LEDGER.positions[0], eligible: false }],
+    })).toBeNull();
+    expect(parsePublicKeyword({
+      ...BITCOIN_LEDGER,
+      positions: [{ ...BITCOIN_LEDGER.positions[0], positionTxHash: 'javascript:alert(1)' }],
+    })).toBeNull();
+    expect(parsePublicKeyword(BITCOIN_LEDGER)?.txUrl.startsWith('https://basescan.org/tx/')).toBe(true);
+  });
+});
 
 describe('platform keyword staking switch', () => {
   const stranger = 'a'.repeat(64);
