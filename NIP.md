@@ -40,6 +40,7 @@ formats. Current support:
 | NIP-34 | Git collaboration | 30617, 1621, 1618, 1617 | ✅ read — Code tab: repos (link `web`/`clone`), issues, PRs, patches from the read-only ngit/GRASP pool (`GIT_RELAYS`) |
 | NIP-35 | Torrents | 2003 | ✅ read — results link the constructed magnet URI |
 | NIP-36 | Content warnings | any | ✅ `content-warning` events render collapsed until tapped |
+| NIP-39 | External identities | 10011 | ✅ read + write — Base payout address `ethereum:8453:address:0x…` with an EIP-191 proof. See below |
 | NIP-50 | Search capability | — | ✅ NIP-50 `search` filters on every Nostr read |
 | NIP-54 | Wiki | 30818 | ✅ read — dedicated wiki relay pool (wikistr relays: `relay.wikifreedia.xyz`, `nostr.wine`, `nostr21.com`, `relay.nostr.band`), user-editable in Settings → Wiki Relays |
 | NIP-56 | Reporting | 1984 | ✅ write (Policy page abuse reports, with NIP-32 labels) |
@@ -349,6 +350,36 @@ the event format below remain unchanged for compatible readers.
 ```
 
 ---
+
+## Base payout wallet (NIP-39)
+
+A Nostr login can name the Base address that should receive payouts. This is a
+kind `10011` replaceable identity claim, queried with `authors: [pubkey]`. The
+Base key is not derived from the Nostr key and is never stored here.
+
+```json
+{
+  "kind": 10011,
+  "content": "",
+  "tags": [
+    ["i", "ethereum:8453:address:0x<40 lowercase hex>", "<130 hex signature>", "eip191"]
+  ]
+}
+```
+
+The signature is EIP-191 `personal_sign` over this exact text, with the
+account's `npub` and the lowercase address:
+
+```text
+Verifying that I control the following Nostr public key: <npub>
+Base payout address: 0x<40 lowercase hex>
+Chain ID: 8453
+```
+
+Readers MUST recover the signer and accept the claim only when it equals the
+address in the `i` tag. Other `i` tags on the same event are preserved. A
+missing event, a wrong author, or a signature that does not recover means
+there is no payout address. The zero address is rejected.
 
 ## Nostra Search Interop (read-only)
 

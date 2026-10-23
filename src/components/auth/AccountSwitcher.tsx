@@ -1,6 +1,15 @@
-import { ChevronDown, LogOut, ShieldCheck, UserIcon, UserPlus } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, LogOut, ShieldCheck, UserIcon, UserPlus, Wallet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
+import { BasePayoutWalletCard } from '@/components/BasePayoutWalletCard';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +21,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar.tsx'
 import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
 import { useAdminAccess } from '@/hooks/useAdminAccess';
+import { useBasePayoutWallet } from '@/hooks/useBasePayoutWallet';
+import { shortPayoutAddress } from '@/lib/basePayoutWallet';
 
 interface AccountSwitcherProps {
   onAddAccountClick: () => void;
@@ -21,6 +32,11 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   const { currentUser, otherUsers, isLoading, setLogin, removeLogin } = useLoggedInAccounts();
   // Team members (owner/admin/moderator) get the Admin console link.
   const { isMod } = useAdminAccess();
+  const payout = useBasePayoutWallet(currentUser?.pubkey);
+  const [payoutOpen, setPayoutOpen] = useState(false);
+  const payoutLabel = payout.data
+    ? `Base ${shortPayoutAddress(payout.data.address)}`
+    : 'Link Base wallet';
 
   if (!currentUser) return null;
 
@@ -33,6 +49,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   const isCurrentUserPending = isLoading && !currentUser.metadata.name;
 
   return (
+    <>
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button className='flex items-center gap-2 h-10 p-1 pr-2.5 rounded-full hover:bg-accent transition-all text-foreground'>
@@ -109,6 +126,13 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
           );
         })}
         <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => setPayoutOpen(true)}
+          className='flex items-center gap-2 cursor-pointer p-2 rounded-md'
+        >
+          <Wallet className='w-4 h-4' />
+          <span className='truncate'>{payoutLabel}</span>
+        </DropdownMenuItem>
         {isMod && (
           <DropdownMenuItem asChild className='flex items-center gap-2 cursor-pointer p-2 rounded-md text-primary'>
             <Link to="/admin">
@@ -133,5 +157,17 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    <Dialog open={payoutOpen} onOpenChange={setPayoutOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Base payout wallet</DialogTitle>
+          <DialogDescription>
+            Connect a Base wallet to this Nostr login. Payouts use the signed address. The wallet key stays in the wallet.
+          </DialogDescription>
+        </DialogHeader>
+        <BasePayoutWalletCard heading={false} />
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

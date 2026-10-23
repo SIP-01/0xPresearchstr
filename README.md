@@ -4,8 +4,6 @@
 
 Presearchstr is the **community fork of [0xSearchstr](https://github.com/NostrDanish/0xSearchstr.git)**, inspired by [Presearch](https://presearch.com): a shared Nostr search index with keyword advertising managed through [Precommunity](https://precommunity.org/keyword-market).
 
-[![Edit with Shakespeare](https://shakespeare.diy/badge.svg)](https://shakespeare.diy/clone?url=https%3A%2F%2Fgithub.com%2FNostrDanish%2F0xPresearchstr.git)
-
 ---
 
 ## One Index, Many Frontends (Federation)
@@ -190,6 +188,15 @@ does not block organic search.
   admin statistics. They no longer receive search placement; their schema and existing
   events are preserved in [NIP.md](NIP.md). Npubs stay hidden unless the visitor turns
   **Show npubs** on.
+
+### Base payout wallet
+
+The account menu and Settings link a Base address to the logged-in Nostr
+account for payouts. The link is a [NIP-39](https://github.com/nostr-protocol/nips/blob/master/39.md)
+kind 10011 claim, `ethereum:8453:address:0x…`, proved by an EIP-191 signature
+from that wallet. The Nostr key is not reused as an Ethereum key. The wallet
+key stays in the wallet. The signed address is public. Details are in
+[NIP.md](NIP.md).
 
 **Privacy:** eligible Web/All text queries still resolve ads in Privacy Mode.
 Our backend can observe the query and browser IP; its API request to PRE community
@@ -702,4 +709,4 @@ MIT
 
 ---
 
-*Vibed with [Shakespeare](https://shakespeare.diy)* · *AI powered by [PPQ.ai](https://ppq.ai/invite/949880ca) (supports the project)*
+*AI powered by [PPQ.ai](https://ppq.ai/invite/949880ca) (supports the project)*

@@ -16,6 +16,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { VoteButtons, VoteTalliesProvider } from '@/components/VoteButtons';
 import { RepoView } from '@/components/RepoView';
 import { useAuthor } from '@/hooks/useAuthor';
+import { useBasePayoutWallet } from '@/hooks/useBasePayoutWallet';
+import { baseAddressUrl, checksumAddress } from '@/lib/basePayoutWallet';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { kindLabel, timeAgo, npubShort, getTitle, getSummary, getDTag } from '@/lib/nostrHelpers';
 import { queryRelayPool } from '@/lib/searchRelays';
@@ -137,6 +139,7 @@ function ProfileView({ pubkey, nip19Id }: { pubkey: string; nip19Id: string }) {
             {metadata?.about && (
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{metadata.about}</p>
             )}
+            <ProfilePayoutAddress pubkey={pubkey} />
             {/* NIP-24 extra metadata: website */}
             {metadata?.website && sanitizeUrl(metadata.website) && (
               <a
@@ -154,6 +157,23 @@ function ProfileView({ pubkey, nip19Id }: { pubkey: string; nip19Id: string }) {
         </Card>
       </div>
     </Layout>
+  );
+}
+
+function ProfilePayoutAddress({ pubkey }: { pubkey: string }) {
+  const wallet = useBasePayoutWallet(pubkey);
+  const href = wallet.data ? baseAddressUrl(wallet.data.address) : null;
+  if (!wallet.data || !href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:underline decoration-2 underline-offset-4 break-all"
+    >
+      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+      Base payout {checksumAddress(wallet.data.address)}
+    </a>
   );
 }
 

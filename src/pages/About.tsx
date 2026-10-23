@@ -425,15 +425,6 @@ export default function About() {
             Source Code
             <ExternalLink className="w-3 h-3 text-muted-foreground" />
           </a>
-          <a
-            href="https://shakespeare.diy/clone?url=https%3A%2F%2Fgithub.com%2FNostrDanish%2F0xPresearchstr.git"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 text-sm font-medium text-primary transition-colors"
-          >
-            Edit with Shakespeare
-            <ExternalLink className="w-3 h-3" />
-          </a>
         </div>
       </div>
     </Layout>
