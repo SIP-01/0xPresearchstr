@@ -1,9 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta http-equiv="content-security-policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self' https:; font-src 'self'; base-uri 'self'; manifest-src 'self'; connect-src 'self' blob: https: wss: ws://*.onion; img-src 'self' data: blob: https:; media-src 'self' https:">
+        <meta name="color-scheme" content="dark light">
+        <!-- Keep the canvas and boot placeholder in the active theme before the app CSS loads. -->
+        <style>
+            :root {
+                --background: hsl(210 40% 98%);
+                --foreground: hsl(222 47% 11%);
+                color-scheme: light;
+                background-color: var(--background);
+            }
+            .dark {
+                --background: hsl(222 47% 6%);
+                --foreground: hsl(214 40% 96%);
+                color-scheme: dark;
+            }
+            .hacker {
+                --background: hsl(120 10% 3%);
+                --foreground: hsl(120 60% 75%);
+            }
+            body { margin: 0; background-color: var(--background); }
+        </style>
+        <script src="%BASE_URL%theme.js"></script>
         <meta name="theme-color" content="#2d8eff">
         <meta property="og:type" content="website">
         <meta property="og:title" content="Presearchstr">
@@ -28,12 +49,12 @@
             <!-- Boot placeholder: replaced the moment React mounts. If the JS
                 bundle fails to load (e.g. a stale cached page referencing a
                 deleted build), the user sees this instead of a white screen. -->
-            <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:hsl(222 47% 6%);color:hsl(210 40% 96%);font-family:ui-sans-serif,system-ui,sans-serif;padding:24px;text-align:center;">
+            <div style="box-sizing:border-box;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--background);color:var(--foreground);font-family:ui-sans-serif,system-ui,sans-serif;padding:24px;text-align:center;">
                 <div style="width:40px;height:40px;border-radius:12px;border:1px solid hsl(212 100% 59% / 0.4);background:hsl(212 100% 59% / 0.12);display:flex;align-items:center;justify-content:center;">
                     <span style="font-family:ui-monospace,monospace;font-weight:700;color:hsl(212 100% 68%);">P</span>
                 </div>
-                <p style="margin:0;font-size:15px;color:hsl(215 20% 65%);">Loading Presearchstr&hellip;</p>
-                <p style="margin:0;font-size:12px;color:hsl(215 20% 45%);max-width:320px;">
+                <p style="margin:0;font-size:15px;opacity:0.7;">Loading Presearchstr&hellip;</p>
+                <p style="margin:0;font-size:12px;opacity:0.7;max-width:320px;">
                     If this doesn't go away, hard-refresh the page
                     (<kbd style="font-family:ui-monospace,monospace;border:1px solid hsl(222 20% 25%);border-radius:4px;padding:1px 5px;">Ctrl</kbd>+<kbd style="font-family:ui-monospace,monospace;border:1px solid hsl(222 20% 25%);border-radius:4px;padding:1px 5px;">Shift</kbd>+<kbd style="font-family:ui-monospace,monospace;border:1px solid hsl(222 20% 25%);border-radius:4px;padding:1px 5px;">R</kbd>)
                     to clear a stale cached build.
