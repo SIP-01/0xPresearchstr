@@ -80,7 +80,7 @@ export interface UseAIAnswerResult {
   active: boolean;
 }
 
-export function useAIAnswer(query: string, results: SearchResult[], enabled: boolean): UseAIAnswerResult {
+export function useAIAnswer(query: string, results: SearchResult[], enabled: boolean, paused = false): UseAIAnswerResult {
   const { config } = useAppContext();
   const queryClient = useQueryClient();
   const aiConfig = getAIConfig();
@@ -118,7 +118,7 @@ export function useAIAnswer(query: string, results: SearchResult[], enabled: boo
         signal,
       });
     },
-    enabled: shouldRun,
+    enabled: shouldRun && !paused,
     staleTime: 5 * 60_000,
     retry: 0,
   });
@@ -133,7 +133,7 @@ export function useAIAnswer(query: string, results: SearchResult[], enabled: boo
   return {
     answer: shouldRun ? data : undefined,
     evidence,
-    isLoading: shouldRun && isLoading,
+    isLoading: shouldRun && !paused && isLoading,
     error: shouldRun && error instanceof Error ? error.message : undefined,
     active: shouldRun,
   };
