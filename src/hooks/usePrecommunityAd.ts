@@ -12,7 +12,7 @@ export function isPrecommunityQueryEligible(query: string): boolean {
 }
 
 /** Ads stay separate from organic ranking, indexing, votes, and AI evidence. */
-export function usePrecommunityAd(query: string, enabled = true) {
+export function usePrecommunityAd(query: string, enabled = true, paused = false) {
   const queryClient = useQueryClient();
   const normalized = query.trim();
   const canFetch = enabled && isPrecommunityQueryEligible(normalized);
@@ -27,7 +27,7 @@ export function usePrecommunityAd(query: string, enabled = true) {
       const data: unknown = await response.json();
       return parsePrecommunityResponse(data) ?? { ad: null };
     },
-    enabled: canFetch,
+    enabled: canFetch && !paused,
     staleTime: Infinity,
     gcTime: 0,
     retry: 0,
@@ -36,10 +36,10 @@ export function usePrecommunityAd(query: string, enabled = true) {
   });
 
   useEffect(() => {
-    if (!canFetch) {
+    if (!canFetch || paused) {
       void queryClient.cancelQueries({ queryKey: ['precommunity-ad', normalized], exact: true });
     }
-  }, [canFetch, normalized, queryClient]);
+  }, [canFetch, paused, normalized, queryClient]);
 
   return { ...result, data: canFetch ? result.data : undefined };
 }
@@ -48,7 +48,7 @@ export function usePrecommunityAd(query: string, enabled = true) {
  * On-chain PRE keyword for this search. The ledger is public, so this read
  * does not depend on the engine ad proxy or its API key.
  */
-export function usePublicKeywordStake(query: string, enabled = true) {
+export function usePublicKeywordStake(query: string, enabled = true, paused = false) {
   const normalized = query.trim();
   const canFetch = enabled && isPrecommunityQueryEligible(normalized);
   const result = useQuery({
@@ -65,7 +65,7 @@ export function usePublicKeywordStake(query: string, enabled = true) {
         return null;
       }
     },
-    enabled: canFetch,
+    enabled: canFetch && !paused,
     staleTime: 60_000,
     retry: 0,
     refetchOnWindowFocus: false,

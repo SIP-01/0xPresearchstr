@@ -57,6 +57,9 @@ export function ProviderStatus({ providers, hasResults = false, className }: Pro
           {p.status === 'idle' && (
             <span className="w-3 h-3 rounded-full bg-muted-foreground/20" />
           )}
+          {p.status === 'cancelled' && (
+            <Minus className="w-3 h-3 text-muted-foreground" />
+          )}
 
           <span className={cn(
             'font-medium',
@@ -66,6 +69,7 @@ export function ProviderStatus({ providers, hasResults = false, className }: Pro
           )}>
             {p.name}
           </span>
+          {p.status === 'cancelled' && <span className="text-muted-foreground">stopped</span>}
 
           {p.status === 'done' && p.latencyMs !== undefined && (
             <span className="text-muted-foreground/50 font-mono">

@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { Search, X, Loader2 } from 'lucide-react';
+import { useState, useCallback, useRef } from 'react';
+import { Search, X, Loader2, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -7,6 +7,7 @@ interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: (value: string) => void;
+  onCancel?: () => void;
   isLoading?: boolean;
   /** Large variant for the home page hero. */
   size?: 'default' | 'large';
@@ -18,12 +19,21 @@ export function SearchBar({
   value,
   onChange,
   onSubmit,
+  onCancel,
   isLoading = false,
   size = 'default',
   className,
   autoFocus = false,
 }: SearchBarProps) {
   const [focused, setFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const canCancel = isLoading && Boolean(onCancel);
+
+  const handleCancel = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    onCancel?.();
+    inputRef.current?.focus();
+  };
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -54,14 +64,30 @@ export function SearchBar({
         'flex items-center justify-center shrink-0 text-muted-foreground',
         size === 'large' ? 'pl-5 pr-1' : 'pl-3.5 pr-0.5',
       )}>
-        {isLoading ? (
-          <Loader2 className={cn('animate-spin', size === 'large' ? 'w-5 h-5' : 'w-4 h-4')} />
-        ) : (
-          <Search className={cn(size === 'large' ? 'w-5 h-5' : 'w-4 h-4')} />
-        )}
+        <span className={cn('relative flex items-center justify-center', size === 'large' ? 'size-5' : 'size-4')}>
+          {canCancel ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size={size === 'large' ? 'icon-lg' : 'icon'}
+              onClick={handleCancel}
+              aria-label="Stop search"
+              title="Stop search"
+              className="absolute rounded-lg"
+            >
+              <Loader2 aria-hidden="true" className={cn('motion-safe:animate-spin', size === 'large' ? 'size-6' : 'size-5')} />
+              <Square aria-hidden="true" className="absolute size-2 fill-current" />
+            </Button>
+          ) : isLoading ? (
+            <Loader2 aria-hidden="true" className={cn('motion-safe:animate-spin', size === 'large' ? 'size-5' : 'size-4')} />
+          ) : (
+            <Search aria-hidden="true" className={cn(size === 'large' ? 'size-5' : 'size-4')} />
+          )}
+        </span>
       </div>
 
       <input
+        ref={inputRef}
         id="search-input"
         type="text"
         value={value}
@@ -72,7 +98,7 @@ export function SearchBar({
         autoFocus={autoFocus}
         autoComplete="off"
         className={cn(
-          'flex-1 bg-transparent outline-none placeholder:text-muted-foreground/60 text-foreground',
+          'min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground/60 text-foreground',
           size === 'large' ? 'px-3 py-4 text-lg' : 'px-2.5 py-2.5 text-sm',
         )}
         aria-label="Search query"
@@ -98,12 +124,14 @@ export function SearchBar({
 
       <div className={cn('shrink-0', size === 'large' ? 'pr-2' : 'pr-1.5')}>
         <Button
-          type="submit"
-          disabled={!value.trim() || isLoading}
+          type={canCancel ? 'button' : 'submit'}
+          disabled={!canCancel && !value.trim()}
+          onClick={canCancel ? handleCancel : undefined}
           size={size === 'large' ? 'default' : 'sm'}
-          aria-label="Search"
+          aria-label={canCancel ? 'Stop search' : 'Search'}
+          title={canCancel ? 'Stop search' : 'Search'}
           className={cn(
-            'rounded-lg font-medium flex items-center justify-center shrink-0',
+            'relative rounded-lg font-medium flex items-center justify-center shrink-0',
             // Large: icon-only square on small screens, full "Search" label from sm up.
             // Small: always an icon button (a 36px button can't fit text).
             size === 'large' ? 'h-12 w-12 p-0 sm:w-28 sm:px-6' : 'h-9 w-9 p-0',
@@ -112,7 +140,10 @@ export function SearchBar({
           )}
         >
           {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <>
+              <Loader2 aria-hidden="true" className={cn('motion-safe:animate-spin', size === 'large' ? 'size-6' : 'size-5')} />
+              {canCancel && <Square aria-hidden="true" className="absolute size-2 fill-current" />}
+            </>
           ) : size === 'large' ? (
             <>
               <Search className="w-5 h-5 sm:hidden" />
