@@ -83,6 +83,7 @@ async function queryInstance(
   signal?: AbortSignal,
   languages?: string[],
 ): Promise<RawSearXNGResponse | null> {
+  signal?.throwIfAborted();
   const params = new URLSearchParams({
     q: query,
     format: 'json',
@@ -109,11 +110,13 @@ async function queryInstance(
       signal,
       headers: { Accept: 'application/json' },
     });
+    signal?.throwIfAborted();
     if (!res.ok) {
       recordInstanceFailure(instanceUrl);
       return null;
     }
     const data = await res.json() as RawSearXNGResponse;
+    signal?.throwIfAborted();
     if (!data.results || !Array.isArray(data.results)) {
       recordInstanceFailure(instanceUrl);
       return null;
@@ -124,6 +127,7 @@ async function queryInstance(
     recordInstanceSuccess(instanceUrl, Math.round(performance.now() - start), data.results.length, languages);
     return data;
   } catch {
+    signal?.throwIfAborted();
     recordInstanceFailure(instanceUrl);
     return null;
   }
@@ -167,11 +171,13 @@ export const searxngProvider: SearchProvider = {
     // First one to return good results wins.
     const parallelBatch = instances.slice(0, PARALLEL_BATCH);
     const raceResult = await raceForResults(parallelBatch, q, signal, effectiveLanguages);
+    signal?.throwIfAborted();
     if (raceResult) return raceResult;
 
     // Phase 2: Sequential fallback through remaining instances.
     const fallbackBatch = instances.slice(PARALLEL_BATCH, PARALLEL_BATCH + MAX_FALLBACK);
     for (const instance of fallbackBatch) {
+      signal?.throwIfAborted();
       const data = await queryInstance(instance, q, signal, effectiveLanguages);
       if (data && data.results.length > 0) {
         return {

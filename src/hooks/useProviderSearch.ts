@@ -9,7 +9,7 @@
  *
  * Returns per-provider status so the UI can show live progress indicators.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import type { SearchResult, SearchSource, ProviderSearchResponse } from '@/lib/providers/types';
@@ -24,7 +24,7 @@ import { useSearchIndexer } from '@/hooks/useSearchIndexer';
 import { useModerationSet } from '@/hooks/useModeration';
 import { useAppContext } from '@/hooks/useAppContext';
 
-export type ProviderStatus = 'idle' | 'searching' | 'done' | 'error';
+export type ProviderStatus = 'idle' | 'searching' | 'done' | 'error' | 'cancelled';
 
 export interface ProviderState {
   id: string;
@@ -102,6 +102,12 @@ export function useProviderSearch({
   // Owner-signed moderation list — hidden URLs/event ids are filtered for everyone.
   const moderationSet = useModerationSet();
 
+  const [searchState, setSearchState] = useState<{
+    key: string;
+    results: SearchResult[];
+    providers: Map<string, ProviderState>;
+  }>({ key: '', results: [], providers: new Map() });
+  const runRef = useRef(0);
   const providerIds = useMemo(() => activeProviders.map((p) => p.id), [activeProviders]);
 
   // ─── Result streaming ──────────────────────────────────────────────
@@ -110,36 +116,6 @@ export function useProviderSearch({
   // answers in ~100ms). The final complete set still lands in the query
   // cache as `data`.
   const streamKey = JSON.stringify([query, source, privacyMode, languageFilter, providerIds]);
-  const [progress, setProgress] = useState<{
-    key: string;
-    results: SearchResult[];
-    providers: Map<string, ProviderState>;
-  }>({ key: '', results: [], providers: new Map() });
-
-  /** Append a provider's results to the visible stream (dedupe + constraints + coverage rank). */
-  const appendStreamed = useCallback((key: string, fresh: SearchResult[], query: string, signal: AbortSignal) => {
-    if (fresh.length === 0) return;
-    setProgress((prev) => {
-      if (signal.aborted || prev.key !== key) return prev;
-      // Hard constraints (filters + NOT) apply to EVERY provider's results —
-      // an engine that misunderstood site: can't leak a wrong result through.
-      const constrained = applyHardConstraints(fresh, parseQuery(query));
-      const merged = deduplicateResults([...prev.results, ...constrained]);
-      return { ...prev, results: sortByQueryRelevance(merged, query) };
-    });
-  }, []);
-
-  const updateProviderState = useCallback((key: string, id: string, update: Partial<ProviderState>, signal: AbortSignal) => {
-    setProgress((prev) => {
-      if (signal.aborted || prev.key !== key) return prev;
-      const next = new Map(prev.providers);
-      const existing = next.get(id);
-      if (existing) {
-        next.set(id, { ...existing, ...update });
-      }
-      return { ...prev, providers: next };
-    });
-  }, []);
 
   // Main query — runs all providers in parallel.
   const { data, isFetching } = useQuery<{
@@ -150,6 +126,31 @@ export function useProviderSearch({
     queryFn: async ({ signal }) => {
       if (!query.trim()) return { results: [], suggestions: [] };
       signal.throwIfAborted();
+
+      const run = ++runRef.current;
+      const isCurrentRun = () => runRef.current === run;
+      const canUpdate = () => isCurrentRun() && !signal.aborted;
+      const updateProviderState = (id: string, update: Partial<ProviderState>) => {
+        setSearchState((prev) => {
+          if (!canUpdate() || prev.key !== streamKey) return prev;
+          const existing = prev.providers.get(id);
+          if (!existing) return prev;
+          return { ...prev, providers: new Map(prev.providers).set(id, { ...existing, ...update }) };
+        });
+      };
+      const onAbort = () => {
+        setSearchState((prev) => {
+          if (!isCurrentRun() || prev.key !== streamKey) return prev;
+          return {
+            ...prev,
+            providers: new Map([...prev.providers].map(([id, state]) => [
+              id,
+              state.status === 'searching' ? { ...state, status: 'cancelled' as const } : state,
+            ])),
+          };
+        });
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
 
       // Initialize provider states.
       const initialStates = new Map<string, ProviderState>();
@@ -162,14 +163,14 @@ export function useProviderSearch({
           resultCount: 0,
         });
       }
-      setProgress({ key: streamKey, results: [], providers: initialStates });
+      setSearchState((prev) => canUpdate() ? { key: streamKey, results: [], providers: initialStates } : prev);
 
       // Run all providers in parallel.
       const results: SearchResult[] = [];
       const allSuggestions: string[] = [];
 
       const settled = await Promise.allSettled(
-        activeProviders.map(async (provider) => {
+        activeProviders.map(async (provider): Promise<ProviderSearchResponse> => {
           const start = performance.now();
           try {
             const response: ProviderSearchResponse = await provider.search({
@@ -178,30 +179,42 @@ export function useProviderSearch({
               languages: languageFilter,
               parsed: parsedQuery,
             });
+            if (!canUpdate()) return { results: [] };
 
             const latencyMs = Math.round(performance.now() - start);
 
-            updateProviderState(streamKey, provider.id, {
+            updateProviderState(provider.id, {
               status: 'done',
               resultCount: response.results.length,
               latencyMs,
-            }, signal);
+            });
 
             // Stream: show this provider's results immediately — the UI
             // re-renders per provider completion, not at the very end.
-            appendStreamed(streamKey, response.results, query, signal);
+            if (response.results.length > 0) {
+              setSearchState((prev) => {
+                if (!canUpdate() || prev.key !== streamKey) return prev;
+                const constrained = applyHardConstraints(response.results, parsedQuery);
+                return {
+                  ...prev,
+                  results: sortByQueryRelevance(deduplicateResults([...prev.results, ...constrained]), query),
+                };
+              });
+            }
             return response;
           } catch {
             const latencyMs = Math.round(performance.now() - start);
-            updateProviderState(streamKey, provider.id, {
+            updateProviderState(provider.id, {
               status: 'error',
               resultCount: 0,
               latencyMs,
-            }, signal);
+            });
             return { results: [], suggestions: [] } as ProviderSearchResponse;
           }
         }),
-      );
+      ).finally(() => signal.removeEventListener('abort', onAbort));
+
+      signal.throwIfAborted();
 
       for (const s of settled) {
         if (s.status === 'fulfilled') {
@@ -235,7 +248,7 @@ export function useProviderSearch({
 
   // The visible result set: the completed (cached) data once available,
   // the live stream while providers are still resolving.
-  const baseResults = data?.results ?? (progress.key === streamKey ? progress.results : EMPTY_RESULTS);
+  const baseResults = data?.results ?? (searchState.key === streamKey ? searchState.results : EMPTY_RESULTS);
 
   // Apply owner-signed moderation filtering to whatever is visible.
   // (Additive: until the moderation list loads, nothing is filtered.)
@@ -248,17 +261,18 @@ export function useProviderSearch({
   // Reset provider states when query clears.
   const providers = useMemo(() => {
     if (!query.trim()) return [];
-    return activeProviders.map<ProviderState>((p) => (progress.key === streamKey ? progress.providers.get(p.id) : undefined) ?? {
+    return activeProviders.map<ProviderState>((p) => (searchState.key === streamKey ? searchState.providers.get(p.id) : undefined) ?? {
       id: p.id,
       name: p.name,
       source: p.source,
       status: isFetching ? 'searching' : data ? 'done' : 'idle',
       resultCount: 0,
     });
-  }, [activeProviders, progress, streamKey, query, isFetching, data]);
+  }, [activeProviders, searchState, streamKey, query, isFetching, data]);
 
-  const isLoading = providers.some((p) => p.status === 'searching');
-  const isEmpty = query.trim().length > 0 && !isLoading && allResults.length === 0;
+  const isCancelled = providers.some((p) => p.status === 'cancelled');
+  const isLoading = enabled && isFetching && providers.some((p) => p.status === 'searching');
+  const isEmpty = enabled && query.trim().length > 0 && !isFetching && !isLoading && !isCancelled && allResults.length === 0;
 
   // Auto-index: contribute surfaced pages (SIP-01 kind 39697) + a hashed
   // term signal (kind 30078, no plaintext) to the shared Nostr index.
@@ -269,13 +283,14 @@ export function useProviderSearch({
       query.trim() &&
       enabled &&
       !isFetching &&
+      !isCancelled &&
       !isLoading &&
       indexedQueryRef.current !== streamKey
     ) {
       indexedQueryRef.current = streamKey;
       void indexResults(query, allResults);
     }
-  }, [allResults, query, enabled, isFetching, isLoading, streamKey, indexResults]);
+  }, [allResults, query, enabled, isFetching, isCancelled, isLoading, streamKey, indexResults]);
 
   // Counts per source.
   const counts = useMemo(() => {

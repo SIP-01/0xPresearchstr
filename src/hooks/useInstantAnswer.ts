@@ -263,7 +263,7 @@ async function fetchUrlAnswer(query: string, signal?: AbortSignal): Promise<Inst
 
 /* ─── Hook ─── */
 
-export function useInstantAnswer(query: string, enabled: boolean): {
+export function useInstantAnswer(query: string, enabled: boolean, paused = false): {
   answer: InstantAnswer | null;
   isLoading: boolean;
 } {
@@ -290,7 +290,7 @@ export function useInstantAnswer(query: string, enabled: boolean): {
   const { data: nip05Answer } = useQuery({
     queryKey: ['instant-answer', 'nip05', trimmed],
     queryFn: ({ signal }) => resolveNip05(trimmed, signal),
-    enabled: nip05Enabled,
+    enabled: nip05Enabled && !paused,
     staleTime: 5 * 60_000,
     retry: 0,
   });
@@ -300,7 +300,7 @@ export function useInstantAnswer(query: string, enabled: boolean): {
   const { data: urlAnswer } = useQuery({
     queryKey: ['instant-answer', 'url', trimmed],
     queryFn: ({ signal }) => fetchUrlAnswer(trimmed, signal),
-    enabled: urlEnabled,
+    enabled: urlEnabled && !paused,
     staleTime: 60_000,
     retry: 0,
   });
@@ -322,7 +322,7 @@ export function useInstantAnswer(query: string, enabled: boolean): {
   const { data: wikiAnswer, isLoading } = useQuery({
     queryKey: ['instant-answer', 'wikipedia', answerText],
     queryFn: ({ signal }) => fetchWikipediaAnswer(answerText, signal),
-    enabled: wikiEnabled,
+    enabled: wikiEnabled && !paused,
     staleTime: 5 * 60_000,
     retry: 0,
   });
@@ -334,7 +334,7 @@ export function useInstantAnswer(query: string, enabled: boolean): {
   const { data: ddgAnswer } = useQuery({
     queryKey: ['instant-answer', 'duckduckgo', answerText],
     queryFn: ({ signal }) => fetchDuckDuckGoAnswer(answerText, signal),
-    enabled: ddgEnabled,
+    enabled: ddgEnabled && !paused,
     staleTime: 5 * 60_000,
     retry: 0,
   });
@@ -348,5 +348,5 @@ export function useInstantAnswer(query: string, enabled: boolean): {
     ddgEnabled ? ddgAnswer : null,
   ].find((candidate) => candidate != null) ?? null;
 
-  return { answer, isLoading: wikiEnabled && isLoading };
+  return { answer, isLoading: wikiEnabled && !paused && isLoading };
 }

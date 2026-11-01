@@ -55,6 +55,7 @@ export async function proxiedFetch(
   /** Per-attempt timeout override (AI completions run long). */
   attemptTimeoutMs = ATTEMPT_TIMEOUT_MS,
 ): Promise<Response> {
+  init?.signal?.throwIfAborted();
   // Same-origin relative URLs (the engine-AI proxy lives at /api/ai/*)
   // need no CORS proxy at all — and must never be routed through one,
   // since that would send engine-tier traffic to a third party.
@@ -87,7 +88,7 @@ export async function proxiedFetch(
       // 5xx / 429 → proxy or target gateway trouble; try the next proxy.
       lastError = new Error(`HTTP ${res.status} via ${new URL(proxy).hostname}`);
     } catch (err) {
-      if (init?.signal?.aborted) throw init.signal.reason;
+      init?.signal?.throwIfAborted();
       lastError = err;
     }
   }

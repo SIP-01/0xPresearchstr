@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useIsFetching, useQueryClient, type QueryFilters } from '@tanstack/react-query';
 import { useSeoMeta } from '@unhead/react';
 import { Search, Network, ExternalLink, Gem, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -35,8 +36,17 @@ const KNOWN_TAB_IDS = new Set(ALL_SOURCE_TABS.map((t) => t.id as string));
  *  in parallel), so pages render instantly — later pages fill in as
  *  slower providers resolve in the background. */
 const PAGE_SIZE = 10;
+const SEARCH_QUERIES: QueryFilters = {
+  predicate: ({ queryKey }) => queryKey[0] === 'provider-search'
+    || queryKey[0] === 'instant-answer'
+    || queryKey[0] === 'ai-answer'
+    || queryKey[0] === 'precommunity-ad'
+    || queryKey[0] === 'precommunity-keyword',
+};
 
 const Index = () => {
+  const queryClient = useQueryClient();
+  const fetchingSearches = useIsFetching(SEARCH_QUERIES);
   const { config } = useAppContext();
   const keywordStaking = usePlatformKeywordStaking();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -50,8 +60,18 @@ const Index = () => {
     : KNOWN_TAB_IDS.has(storedDefault) ? storedDefault as SourceTabValue : 'web';
 
   const [query, setQuery] = useState(initialQuery);
-  const [activeQuery, setActiveQuery] = useState(initialQuery);
+  const activeQuery = initialQuery;
   const [source, setSource] = useState<SourceTabValue>(initialSource);
+  const [isStopped, setIsStopped] = useState(false);
+
+  const cancelSearch = useCallback(() => {
+    const pending = queryClient.getQueryCache().findAll({ ...SEARCH_QUERIES, fetchStatus: 'fetching' });
+    void queryClient.cancelQueries(SEARCH_QUERIES);
+    // Cancel reverts query state; invalidate afterward so even a fresh cached query can restart.
+    for (const { queryKey } of pending) {
+      void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: 'none' });
+    }
+  }, [queryClient]);
 
   const hasSearched = activeQuery.length > 0;
 
@@ -70,7 +90,7 @@ const Index = () => {
     if (paramQuery !== (new URLSearchParams(previousUrl).get('q') ?? '')) {
       setQuery(paramQuery);
     }
-    setActiveQuery(paramQuery);
+    setIsStopped(false);
     setSource(initialSource);
   }
   useEffect(() => {
@@ -86,7 +106,6 @@ const Index = () => {
     results,
     providers,
     isLoading,
-    isFetching,
     isEmpty,
     suggestions,
     counts,
@@ -95,7 +114,7 @@ const Index = () => {
   } = useProviderSearch({
     query: activeQuery,
     source: providerSource,
-    enabled: hasSearched && source !== 'i2p',
+    enabled: hasSearched && source !== 'i2p' && !isStopped,
   });
 
   // Filter results for the current source tab.
@@ -119,8 +138,8 @@ const Index = () => {
     && (source === 'web' || source === 'all')
     && isPrecommunityQueryEligible(activeQuery);
   const adsEnabled = hasSearched && adQueryEligible;
-  const adQuery = usePrecommunityAd(activeQuery, adsEnabled);
-  const keywordStake = usePublicKeywordStake(activeQuery, adsEnabled);
+  const adQuery = usePrecommunityAd(activeQuery, adsEnabled, isStopped);
+  const keywordStake = usePublicKeywordStake(activeQuery, adsEnabled, isStopped);
   const placementSettled = !adQuery.isPending && !keywordStake.isPending;
 
   const totalResults = organicResults.length;
@@ -152,11 +171,12 @@ const Index = () => {
   const { answer: instantAnswer } = useInstantAnswer(
     activeQuery,
     hasSearched && source !== 'i2p',
+    isStopped,
   );
 
   // AI Answer layer — synthesizes from the search evidence (opt-in,
   // Settings → AI). Runs only for text-class queries with enough evidence.
-  const ai = useAIAnswer(activeQuery, organicResults, hasSearched && source !== 'i2p');
+  const ai = useAIAnswer(activeQuery, organicResults, hasSearched && source !== 'i2p', isStopped);
 
   useSeoMeta({
     title: hasSearched ? `${activeQuery} - Presearchstr` : 'Presearchstr - Decentralized Search Aggregator',
@@ -164,15 +184,26 @@ const Index = () => {
   });
 
   const handleSubmit = useCallback((value: string) => {
-    setActiveQuery(value);
+    if (value === activeQuery && !isStopped) return;
+    cancelSearch();
+    if (value === activeQuery) setIsStopped(false);
+    setQuery(value);
     setSearchParams((prev) => {
       prev.set('q', value);
       prev.set('source', source);
       return prev;
     });
-  }, [source, setSearchParams]);
+  }, [activeQuery, isStopped, cancelSearch, source, setSearchParams]);
+
+  const handleStop = useCallback(() => {
+    setIsStopped(true);
+    cancelSearch();
+  }, [cancelSearch]);
 
   const handleSourceChange = useCallback((newSource: SourceTabValue) => {
+    if (newSource === source) return;
+    cancelSearch();
+    setIsStopped(false);
     setSource(newSource);
     if (activeQuery) {
       setSearchParams((prev) => {
@@ -180,7 +211,7 @@ const Index = () => {
         return prev;
       });
     }
-  }, [activeQuery, setSearchParams]);
+  }, [activeQuery, source, cancelSearch, setSearchParams]);
 
   // ─── Hero mode (no search yet) ───
   if (!hasSearched) {
@@ -271,10 +302,12 @@ const Index = () => {
             value={query}
             onChange={setQuery}
             onSubmit={handleSubmit}
-            isLoading={isFetching}
+            isLoading={!isStopped && source !== 'i2p' && fetchingSearches > 0}
+            onCancel={handleStop}
           />
           {/* How the engine understood the query — phrases, boolean, filters */}
           <QueryInsights query={activeQuery} className="mt-2" />
+          {isStopped && <p role="status" className="mt-2 text-sm text-muted-foreground">Search stopped.</p>}
         </div>
 
         {/* Tabs + provider status */}
