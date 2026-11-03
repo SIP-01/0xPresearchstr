@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect } from 'react';
+import { type ReactNode, useCallback, useEffect, useLayoutEffect } from 'react';
 import { z } from 'zod';
 import { useNostrLogin } from '@nostrify/react/login';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
@@ -209,7 +209,7 @@ export function AppProvider(props: AppProviderProps) {
  * Two core themes (light/dark, both Presearch-branded) + hidden hacker.
  */
 function useApplyTheme(theme: Theme) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = window.document.documentElement;
 
     root.classList.remove('light', 'dark', 'hacker', 'presearch');
