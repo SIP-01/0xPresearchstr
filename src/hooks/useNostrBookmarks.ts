@@ -105,11 +105,17 @@ export function useNostrBookmarks() {
 
     if (existing?.content) {
       const nip44 = user.signer.nip44;
-      if (!nip44) {
-        throw new Error('Your signer does not support NIP-44, so existing private bookmarks cannot be safely preserved.');
-      }
+      const legacyNip04 = user.signer.nip04;
       try {
-        const plaintext = await nip44.decrypt(user.pubkey, existing.content);
+        // NIP-51 allows reading historical NIP-04 ciphertext identified by
+        // ?iv=. New list writes below always re-encrypt with NIP-44.
+        const plaintext = existing.content.includes('?iv=')
+          ? await (legacyNip04
+            ? legacyNip04.decrypt(user.pubkey, existing.content)
+            : Promise.reject(new Error('Your signer cannot decrypt this legacy NIP-04 bookmark list.')))
+          : await (nip44
+            ? nip44.decrypt(user.pubkey, existing.content)
+            : Promise.reject(new Error('Your signer does not support NIP-44 decryption.')));
         const parsed: unknown = JSON.parse(plaintext);
         if (!isTagArray(parsed)) throw new Error('Private bookmark content is not a Nostr tag array.');
         privateTags = parsed;
@@ -119,6 +125,10 @@ export function useNostrBookmarks() {
             ? 'Could not decrypt your existing private bookmarks. Nothing was overwritten. ' + error.message
             : 'Could not decrypt your existing private bookmarks. Nothing was overwritten.',
         );
+      }
+
+      if (!nip44) {
+        throw new Error('Your signer must support NIP-44 to write updated private bookmark lists. Existing private content was preserved.');
       }
     }
 
