@@ -62,11 +62,13 @@ const LANGUAGE_RE = /^[a-z]{2}$/;
 const COUNTRY_RE = /^[A-Z]{2}$/;
 
 /** Registered keyword-shaped extension tags (spec §9.2). */
-const KEYWORD_EXTENSIONS = ['type', 'platform', 'category', 'network', 'role'] as const;
+const KEYWORD_EXTENSIONS = ['type', 'platform', 'category', 'network'] as const;
 
 /** All registered extension tags this module knows how to build/parse. */
-const EXTENSION_TAGS = [...KEYWORD_EXTENSIONS, 'proto', 'country', 'mime'] as const;
+const EXTENSION_TAGS = [...KEYWORD_EXTENSIONS, 'role', 'proto', 'country', 'mime'] as const;
 const CAPABILITY_ADDRESS_RE = /^39698:[0-9a-f]{64}:[a-z0-9][a-z0-9-]{0,63}$/;
+const CAPABILITY_ROLES = new Set(['agent', 'tool', 'model', 'api', 'compute', 'dataset', 'gateway']);
+const CAPABILITY_PROTOCOLS = new Set(['mcp', 'http', 'contextvm', 'nostr', 'a2a']);
 
 /** Tracking parameters stripped during normalization (spec §7 step 5). */
 const TRACKING_PARAMS = new Set([
@@ -238,9 +240,11 @@ function buildExtensionTags(input: IndexObservationInput): string[][] {
     }
   }
 
+  if (input.role && CAPABILITY_ROLES.has(input.role)) tags.push(['role', input.role]);
+
   const protocols = Array.isArray(input.proto) ? input.proto : input.proto ? [input.proto] : [];
   for (const value of protocols) {
-    if (value && EXTENSION_VALUE_RE.test(value)) tags.push(['proto', value.toLowerCase()]);
+    if (CAPABILITY_PROTOCOLS.has(value)) tags.push(['proto', value]);
   }
 
   if (input.country) {
