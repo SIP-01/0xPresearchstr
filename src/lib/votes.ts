@@ -4,7 +4,7 @@
  * NIP-73 k/i identifiers. Legacy kind-7/r URL votes remain read-only compatible.
  */
 import type { NostrEvent } from '@nostrify/nostrify';
-import { normalizeIndexUrl } from '@/lib/webIndex';
+import { normalizeIndexUrl, normalizeNip73WebIdentifier } from '@/lib/webIndex';
 
 export const VOTE_KIND = 7;
 export const EXTERNAL_REACTION_KIND = 17;
@@ -12,6 +12,8 @@ export type VoteDirection = 1 | -1;
 
 export interface VoteTarget {
   key: string;
+  /** Old kind-7/r target key, used only to display legacy tallies. */
+  legacyKey?: string;
   kind: typeof VOTE_KIND | typeof EXTERNAL_REACTION_KIND;
   tags: string[][];
 }
@@ -33,9 +35,15 @@ export function voteTargetFor(result: {
     return { key: 'e:' + event.id, kind: VOTE_KIND, tags };
   }
 
-  const normalized = normalizeIndexUrl(result.url);
+  const normalized = normalizeNip73WebIdentifier(result.url);
   if (!normalized) return null;
-  return { key: 'u:' + normalized, kind: EXTERNAL_REACTION_KIND, tags: [['k', 'web'], ['i', normalized]] };
+  const legacy = normalizeIndexUrl(result.url);
+  return {
+    key: 'u:' + normalized,
+    ...(legacy && legacy !== normalized ? { legacyKey: 'u:' + legacy } : {}),
+    kind: EXTERNAL_REACTION_KIND,
+    tags: [['k', 'web'], ['i', normalized]],
+  };
 }
 
 export function buildVoteEvent(target: VoteTarget, direction: VoteDirection): {
@@ -52,9 +60,9 @@ export function buildVoteEvent(target: VoteTarget, direction: VoteDirection): {
 
 export interface VoteTally { up: number; down: number; score: number; }
 
-function urlTargetKey(value: string | undefined): string | null {
+function urlTargetKey(value: string | undefined, legacy = false): string | null {
   if (!value) return null;
-  const normalized = normalizeIndexUrl(value);
+  const normalized = legacy ? normalizeIndexUrl(value) : normalizeNip73WebIdentifier(value);
   return normalized ? 'u:' + normalized : null;
 }
 
@@ -62,7 +70,7 @@ function eventTargetKey(event: NostrEvent): string | null {
   if (event.kind === VOTE_KIND) {
     const eventId = event.tags.find(([name]) => name === 'e')?.[1];
     if (eventId) return 'e:' + eventId;
-    return urlTargetKey(event.tags.find(([name]) => name === 'r')?.[1]);
+    return urlTargetKey(event.tags.find(([name]) => name === 'r')?.[1], true);
   }
   if (event.kind === EXTERNAL_REACTION_KIND) {
     const kinds = event.tags.filter(([name]) => name === 'k').map(([, value]) => value);
