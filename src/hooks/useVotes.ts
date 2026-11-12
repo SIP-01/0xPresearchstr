@@ -19,6 +19,7 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useAppContext } from '@/hooks/useAppContext';
 import {
   VOTE_KIND,
+  EXTERNAL_REACTION_KIND,
   buildVoteEvent,
   setMyVote,
   tallyVotes,
@@ -55,7 +56,11 @@ export function useVoteCounts(targetKeys: string[]) {
 
       const filters: NostrFilter[] = [];
       if (eventIds.length > 0) filters.push({ kinds: [VOTE_KIND], '#e': eventIds, limit: 500 });
-      if (urls.length > 0) filters.push({ kinds: [VOTE_KIND], '#r': urls, limit: 500 });
+      if (urls.length > 0) {
+        filters.push({ kinds: [EXTERNAL_REACTION_KIND], '#k': ['web'], '#i': urls, limit: 500 });
+        // Read legacy kind-7/r URL reactions during migration; never publish this shape.
+        filters.push({ kinds: [VOTE_KIND], '#r': urls, limit: 500 });
+      }
       if (filters.length === 0) return new Map<string, VoteTally>();
 
       const relayUrls = [...new Set([...getIndexRelayUrls(), ...getSearchRelayUrls()])];
@@ -86,7 +91,7 @@ export function useVoteActions() {
   const asIdentity = config.voteWithIdentity;
 
   const vote = useCallback(async (
-    result: { url: string; nostrEvent?: { id: string } },
+    result: { url: string; source?: string; nostrEvent?: { id: string; kind?: number; pubkey?: string; tags?: string[][] } },
     direction: VoteDirection,
   ): Promise<VoteTarget> => {
     const target = voteTargetFor(result);
