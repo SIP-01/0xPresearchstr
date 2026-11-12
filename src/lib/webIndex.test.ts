@@ -9,6 +9,7 @@ import {
   contentHash,
   documentId,
   normalizeIndexUrl,
+  normalizeNip73WebIdentifier,
   observationFromResult,
   parseIndexEvent,
   verifyObservation,
@@ -561,5 +562,17 @@ describe('Nostra payload validation and community isolation', () => {
     ];
     const response = await communityProvider.search({ query: 'nostr' });
     expect(response.results.map((r) => r.url)).toEqual(['https://example.com/nostr']);
+  });
+});
+
+
+describe('normalizeNip73WebIdentifier', () => {
+  it('removes only fragments and preserves query parameters for cross-client NIP-73 IDs', () => {
+    expect(normalizeNip73WebIdentifier('https://www.example.com/page?utm_source=client#section'))
+      .toBe('https://www.example.com/page?utm_source=client');
+  });
+
+  it('rejects non-http(s) identifiers', () => {
+    expect(normalizeNip73WebIdentifier('nostr:npub1example')).toBeNull();
   });
 });
