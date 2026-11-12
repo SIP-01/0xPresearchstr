@@ -124,6 +124,7 @@ export function useNostrBookmarks() {
           error instanceof Error
             ? 'Could not decrypt your existing private bookmarks. Nothing was overwritten. ' + error.message
             : 'Could not decrypt your existing private bookmarks. Nothing was overwritten.',
+          { cause: error },
         );
       }
 
@@ -219,8 +220,11 @@ export function useNostrBookmarks() {
       return { bookmarkEventId, listEventId: publishedList.id, visibility };
     } catch (error) {
       if (bookmarkEventId) {
-        throw new Error('The public web bookmark was published, but updating your NIP-51 list failed. ' +
-          (error instanceof Error ? error.message : 'Unknown publishing error.'));
+        throw new Error(
+          'The public web bookmark was published, but updating your NIP-51 list failed. ' +
+          (error instanceof Error ? error.message : 'Unknown publishing error.'),
+          { cause: error },
+        );
       }
       throw error;
     }
