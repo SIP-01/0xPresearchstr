@@ -41,7 +41,7 @@ formats. Current support:
 | NIP-35 | Torrents | 2003 | ✅ read — results link the constructed magnet URI |
 | NIP-36 | Content warnings | any | ✅ `content-warning` events render collapsed until tapped |
 | NIP-39 | External identities | 10011 | ✅ read + write — Base payout address `ethereum:8453:address:0x…` with an EIP-191 proof. See below |
-| NIP-51 | Lists and bookmarks | 10003, 30003 | ✅ read + write global kind-10003 bookmarks; public tags and NIP-44-encrypted private items via the logged-in signer. Categorized kind-30003 sets supported by core helpers; category UI not yet exposed |
+| NIP-51 | Lists and bookmarks | 10003, 30003 | ✅ save writes and read-modify-write preservation for global kind-10003 list; private items use NIP-44. Saved-list browsing UI and categorized kind-30003 UI are not yet exposed |
 | NIP-73 | External content IDs | — | ✅ NIP-73 web identifiers (k=web, i=normalized URL) used for external reactions and bookmark references |
 | NIP-85 | Trusted assertions | 10040, 30382–30385 | 🚧 shared-core provider validation and platform/personal WoT policy in review |
 | NIP-50 | Search capability | — | ✅ NIP-50 `search` filters on every Nostr read |
