@@ -8,7 +8,7 @@
  */
 import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { finalizeEvent } from 'nostr-tools/pure';
+import { finalizeEvent, verifyEvent } from 'nostr-tools/pure';
 import { type NostrEvent, type NostrFilter } from '@nostrify/nostrify';
 
 import { queryRelayPool, getSearchRelay } from '@/lib/searchRelays';
@@ -73,7 +73,14 @@ export function useVoteCounts(targetKeys: string[]) {
         }
       }
 
-      return tallyVotes([...events.values()]);
+      const verifiedEvents = [...events.values()].filter((event) => {
+        try {
+          return verifyEvent(event);
+        } catch {
+          return false;
+        }
+      });
+      return tallyVotes(verifiedEvents);
     },
     enabled: key.length > 0,
     staleTime: 30_000,
