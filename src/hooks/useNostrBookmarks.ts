@@ -34,16 +34,20 @@ function addUniqueTag(tags: string[][], tag: string[]): void {
   }
 }
 
-function normalizeWebUrl(value: string): URL | null {
+function parseWebUrl(value: string): URL | null {
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-    if (!url.hostname) return null;
-    url.hash = '';
-    return url;
+    return url.hostname ? url : null;
   } catch {
     return null;
   }
+}
+
+function nip73WebIdentifier(url: URL): string {
+  const normalized = new URL(url.href);
+  normalized.hash = '';
+  return normalized.href;
 }
 
 function nipB0DTag(url: URL): string {
@@ -121,7 +125,7 @@ export function useNostrBookmarks() {
     let bookmarkEventId: string | undefined;
     const isNativeNostr = result.source === 'nostr' && !!result.nostrEvent;
     const existingB0 = result.nostrEvent?.kind === 39701 ? result.nostrEvent : undefined;
-    const url = !isNativeNostr ? normalizeWebUrl(result.url) : null;
+    const url = !isNativeNostr ? parseWebUrl(result.url) : null;
 
     if (isNativeNostr) {
       const references = visibility === 'public'
@@ -152,15 +156,17 @@ export function useNostrBookmarks() {
         const d = existingB0.tags.find(([name]) => name === 'd')?.[1];
         if (!d) throw new Error('The existing NIP-B0 bookmark is missing its d tag.');
         addUniqueTag(publicTags, ['a', '39701:' + existingB0.pubkey + ':' + d]);
+        addUniqueTag(publicTags, ['i', nip73WebIdentifier(url)]);
+        addUniqueTag(publicTags, ['k', 'web']);
       } else {
         // Publish the individual public bookmark record first.
         const d = nipB0DTag(url);
         const title = result.title.trim();
         const description = result.snippet.trim();
         const b0Tags: string[][] = [['d', d]];
-        if (result.timestamp && Number.isInteger(result.timestamp)) {
-          b0Tags.push(['published_at', String(result.timestamp)]);
-        }
+        // NIP-B0 published_at is the first bookmark publication time,
+        // not the source page's own publication timestamp.
+        b0Tags.push(['published_at', String(Math.floor(Date.now() / 1000))]);
         if (title) b0Tags.push(['title', title]);
         for (const topic of [...new Set(result.tags ?? [])].slice(0, 20)) {
           const normalized = topic.toLowerCase().trim();
@@ -173,11 +179,13 @@ export function useNostrBookmarks() {
         });
         bookmarkEventId = publishedB0.id;
         addUniqueTag(publicTags, ['a', '39701:' + publishedB0.pubkey + ':' + d]);
+        addUniqueTag(publicTags, ['i', nip73WebIdentifier(url)]);
+        addUniqueTag(publicTags, ['k', 'web']);
       }
     } else {
       // Private web reference exists only inside NIP-44 encrypted kind-10003 content.
       if (!user.signer.nip44) throw new Error('Your signer must support NIP-44 to save private bookmarks.');
-      addUniqueTag(privateTags, ['i', url.href]);
+      addUniqueTag(privateTags, ['i', nip73WebIdentifier(url)]);
       addUniqueTag(privateTags, ['k', 'web']);
     }
 
