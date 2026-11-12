@@ -400,3 +400,20 @@ export function observationFromResult(result: SearchResult): IndexObservationInp
     source: APP_PROFILE.indexerSource,
   };
 }
+
+/**
+ * NIP-73 web identifier normalization. Keep the URL's query intact; only
+ * remove the fragment. SIP-01's document identity normalizer is deliberately
+ * more aggressive and must not be substituted for a NIP-73 external ID.
+ */
+export function normalizeNip73WebIdentifier(input: string): string | null {
+  try {
+    const url = new URL(input);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (!url.hostname) return null;
+    url.hash = '';
+    return url.href;
+  } catch {
+    return null;
+  }
+}
