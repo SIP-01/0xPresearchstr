@@ -43,12 +43,12 @@ function getVoteRelay(url: string) {
 
 /** Batch-fetch tallies for a set of result targets (top visible results). */
 export function useVoteCounts(targetKeys: string[]) {
-  const key = targetKeys.slice(0, 20).sort().join(',');
+  const key = JSON.stringify([...new Set(targetKeys.slice(0, 20))].sort());
 
   return useQuery({
     queryKey: ['vote-tallies', key],
     queryFn: async ({ signal }) => {
-      const keys = key.split(',').filter(Boolean);
+      const keys = JSON.parse(key) as string[];
       if (keys.length === 0) return new Map<string, VoteTally>();
 
       const eventIds = keys.filter((k) => k.startsWith('e:')).map((k) => k.slice(2));
