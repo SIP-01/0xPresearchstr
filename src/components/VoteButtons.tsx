@@ -29,7 +29,7 @@ export function VoteTalliesProvider({ results, children }: {
   children: React.ReactNode;
 }) {
   const keys = useMemo(
-    () => results.map(voteTargetFor).filter((t): t is NonNullable<typeof t> => t !== null).map((t) => t.key),
+    () => results.map(voteTargetFor).filter((t): t is NonNullable<typeof t> => t !== null).flatMap((t) => t.legacyKey ? [t.key, t.legacyKey] : [t.key]),
     [results],
   );
   const { data } = useVoteCounts(keys);
@@ -52,9 +52,9 @@ interface VoteButtonsProps {
 export function VoteButtons({ result, className }: VoteButtonsProps) {
   const target = useMemo(() => voteTargetFor(result), [result]);
   const tallies = useContext(VoteTalliesContext);
-  const tally = target ? tallies?.get(target.key) : undefined;
+  const tally = target ? (tallies?.get(target.key) ?? (target.legacyKey ? tallies?.get(target.legacyKey) : undefined)) : undefined;
 
-  const [mine, setMine] = useState(() => (target ? getMyVote(target.key) : null));
+  const [mine, setMine] = useState(() => (target ? (getMyVote(target.key) ?? (target.legacyKey ? getMyVote(target.legacyKey) : null)) : null));
   const [pending, setPending] = useState(false);
   const { vote, asIdentity, canVoteWithIdentity } = useVoteActions();
   const { toast } = useToast();
