@@ -18,6 +18,12 @@
 > NIP-23/24), and NIP-50's extension rule is SHOULD-level — and adds the §20.1
 > NIP dependency table. The wire format is unchanged: schema `v` stays `"1"`
 > and every v1/v1.1 event remains valid.
+> Revision v1.3 (2026-11-07) adds optional extension tags `role` and `proto`,
+> and allows a standard NIP-01 `a` tag to point at a companion capability
+> announcement (kind 39698, specified in
+> [`docs/CAPABILITY-DISCOVERY.md`](../../docs/CAPABILITY-DISCOVERY.md)).
+> Kind 39697, schema `v`, and every existing event are unchanged. Clients that
+> ignore unknown tags keep working.
 
 **One shared decentralized index. Many independent indexers. Many independent
 search nodes. Many independent search engines. No mandatory identity. No single
@@ -229,6 +235,8 @@ in this section.
 | `network` | keyword | lower | Network the document lives on: `clearnet`, `tor`, `i2p`, … | UNCAGED Index Relay |
 | `country` | `^[a-zA-Z]{2}$` | upper (ISO 3166-1 alpha-2) | Country the document targets or originates from | UNCAGED Index Relay |
 | `mime` | MIME type | lower | Document media type, e.g. `application/pdf` | UNCAGED Index Relay |
+| `role` | keyword | lower | Optional role of a service document: `agent`, `tool`, `model`, `api`, `compute`, `dataset`, `gateway`. Ignored unless the consumer understands it. | ORBSTR |
+| `proto` | keyword | lower | Optional transport: `mcp`, `http`, `contextvm`, `nostr`, `a2a`. Repeatable. | ORBSTR |
 
 ### 9.3 Hash extensions
 
@@ -245,6 +253,13 @@ registered here as new tags with their hash algorithm stated explicitly:
 Application-specific signals (e.g. a staking signal, a vote, a curated
 badge) go in **separate events referencing the observation** (by `d` tag or
 event coordinate) — never by changing the meaning of core fields.
+
+A web observation of a public service page MAY include a NIP-01 `a` tag whose
+value is `39698:<pubkey>:<d-identifier>`, plus the optional `role` and `proto`
+tags above. That pointer is not part of document identity. `d`, `u`, and `x`
+are still computed exactly as in §3, §7, and §8. Capability announcements
+themselves are **not** kind 39697. See `docs/CAPABILITY-DISCOVERY.md`.
+
 
 ## 10. Versioning
 
@@ -544,3 +559,18 @@ row above states a concrete, audited relationship.
   [Crawlstr](https://github.com/NostrDanish/Crwalstr) (`src/crawler/`),
   [UNCAGED Index Relay](https://github.com/NostrDanish/UNCAGED-Index-Relay)
   (`src/web-document.ts`)
+
+
+## 21. Capability discovery (companion, optional)
+
+Kind 39697 does not describe agents, tools, or endpoints. ORBSTR publishes
+those as addressable **kind 39698** events, checked unused against
+`nostr-protocol/nips` and `nostr-protocol/registry-of-kinds` on 2026-11-07.
+
+Consumers of this specification MAY ignore §21 entirely. Relays that validate
+kind 39697 MUST keep accepting events that lack `role`, `proto`, and `a`, and
+MUST ignore those tags if present (forwards compatibility, §9.1).
+
+Normative detail, the kind 39698 schema, and the list of Nostr kinds this
+profile deliberately does not overload (31989, 31990, 32267, 30402, 30078,
+NIP-90 job kinds) live in [`docs/CAPABILITY-DISCOVERY.md`](../../docs/CAPABILITY-DISCOVERY.md).
