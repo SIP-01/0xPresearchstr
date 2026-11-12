@@ -400,6 +400,9 @@ describe('parseIndexEvent', () => {
       type: 'repository',
       platform: 'github',
       network: 'clearnet',
+      role: 'tool',
+      proto: ['mcp', 'http'],
+      capabilityAddress: '39698:' + 'a'.repeat(64) + ':example-tool',
     }))!;
     const event = finalizeEvent(
       { ...template, created_at: 1754650000 },
@@ -407,7 +410,15 @@ describe('parseIndexEvent', () => {
     );
     const obs = parseIndexEvent(event);
     expect(obs).not.toBeNull();
-    expect(obs!.extensions).toEqual({ type: 'repository', platform: 'github', network: 'clearnet' });
+    expect(obs!.extensions).toEqual({
+      type: 'repository',
+      platform: 'github',
+      network: 'clearnet',
+      role: 'tool',
+      proto: 'mcp',
+    });
+    expect(obs!.extensionValues?.proto).toEqual(['mcp', 'http']);
+    expect(obs!.capabilityAddress).toBe('39698:' + 'a'.repeat(64) + ':example-tool');
   });
 });
 
