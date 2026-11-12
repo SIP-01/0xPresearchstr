@@ -41,7 +41,7 @@ formats. Current support:
 | NIP-35 | Torrents | 2003 | ✅ read — results link the constructed magnet URI |
 | NIP-36 | Content warnings | any | ✅ `content-warning` events render collapsed until tapped |
 | NIP-39 | External identities | 10011 | ✅ read + write — Base payout address `ethereum:8453:address:0x…` with an EIP-191 proof. See below |
-| NIP-51 | Lists and bookmarks | 10003, 30003 | 🚧 shared-core NIP-44 public/private list helpers in review; app bookmark-list UX rollout pending |
+| NIP-51 | Lists and bookmarks | 10003, 30003 | ✅ read + write global kind-10003 bookmarks; public tags and NIP-44-encrypted private items via the logged-in signer. Categorized kind-30003 sets supported by core helpers; category UI not yet exposed |
 | NIP-73 | External content IDs | — | ✅ NIP-73 web identifiers (k=web, i=normalized URL) used for external reactions and bookmark references |
 | NIP-85 | Trusted assertions | 10040, 30382–30385 | 🚧 shared-core provider validation and platform/personal WoT policy in review |
 | NIP-50 | Search capability | — | ✅ NIP-50 `search` filters on every Nostr read |
@@ -52,14 +52,13 @@ formats. Current support:
 | NIP-78 | App-specific data | 30078 | ✅ submissions / term signals (read + write) · legacy cache and archived stakes (read-only, see below) |
 | NIP-92 | Media attachments (`imeta`) | 1 | ✅ read (inline thumbnails in results) |
 | NIP-94 | File metadata | 1063 | ✅ read (file results) |
-| NIP-B0 | Web bookmarks | 39701 | ✅ read (Community provider — user-curated links) |
+| NIP-B0 | Web bookmarks | 39701 | ✅ read + write public web bookmarks; public saves create kind 39701 and NIP-51 list membership. Private saves never publish kind 39701 |
 | NIP-C0 | Code snippets | 1337 | ✅ read (Code tab, language badges) |
 | BUD-03 | Blossom user server list | 10063 | ✅ read + write (uploads) |
 | SIP-01 | Search Index Protocol | 39697 | ✅ read + write ([spec](docs/SIP-01.md)) |
 
 Considered and intentionally skipped for now: NIP-5A (nsite hosting — hosting, not
-search), NIP-85 (trusted assertions — needs a provider-selection UX; a natural future
-fit for indexer reputation), NIP-86 (relay operator API),
+search), NIP-85 (trusted assertions — shared-core provider/policy implementation is in review; app-specific provider selectors and admin settings remain future work), NIP-86 (relay operator API),
 NIP-B7 (Blossom URL fallback — uploads already go through Blossom).
 
 ---
