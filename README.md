@@ -338,8 +338,9 @@ query.
 ### Voting & Reporting
 
 Every result card carries 👍/👎 votes and a report flag:
+- **Bookmarks** use the standard NIP-51 global list (kind 10003): public web saves also publish a NIP-B0 kind 39701 record; private web saves are stored only as NIP-44-encrypted list content.
 
-- **Votes** are NIP-25 reactions (kind 7, `e` tag for events, `r` tag for URLs —
+- **Votes** are NIP-25 reactions: kind 7 for native Nostr events; kind 17 with NIP-73 `k=web` and `i=<normalized URL>` for web results. Legacy kind-7/`r` URL votes remain read-only compatible.
   SIP-01-normalized so the same page tallies together). **Anonymous by default**:
   signed by this device's built-in indexing identity, never your npub. Flip
    "Vote with my npub" in Settings → Auto Indexer to vote attributably.

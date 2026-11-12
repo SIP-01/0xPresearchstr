@@ -34,13 +34,16 @@ formats. Current support:
 | NIP-19 | bech32 identifiers | — | ✅ `/npub…`, `/note1…`, `/nevent1…`, `/naddr1…` routes |
 | NIP-23 | Long-form articles | 30023 | ✅ read (Nostr tab + All) |
 | NIP-24 | Extra metadata (`display_name`, `website`, `banner`, `bot`) | 0 | ✅ read (profile pages) |
-| NIP-25 | Reactions (votes) | 7 | ✅ read + write — 👍/👎 on results; anonymous via the device indexing identity by default, or the user's npub when toggled |
+| NIP-25 | Reactions | 7, 17 | ✅ read + write — kind 7 for Nostr events; kind 17 + NIP-73 k/i for external web URLs; legacy kind-7/r read-only compatibility |
 | NIP-09 | Deletion | 5 | ✅ write (owner retracts moderation labels) |
 | NIP-32 | Labeling (`L`/`l`) | —, 1985 | ✅ write (abuse reports self-label with `0xsearchstr.abuse`; owner moderation labels under `0xsearchstr.moderation`) + ✅ read (owner-signed `hidden` labels filter all users' results) |
 | NIP-34 | Git collaboration | 30617, 1621, 1618, 1617 | ✅ read — Code tab: repos (link `web`/`clone`), issues, PRs, patches from the read-only ngit/GRASP pool (`GIT_RELAYS`) |
 | NIP-35 | Torrents | 2003 | ✅ read — results link the constructed magnet URI |
 | NIP-36 | Content warnings | any | ✅ `content-warning` events render collapsed until tapped |
 | NIP-39 | External identities | 10011 | ✅ read + write — Base payout address `ethereum:8453:address:0x…` with an EIP-191 proof. See below |
+| NIP-51 | Lists and bookmarks | 10003, 30003 | ✅ save writes and read-modify-write preservation for global kind-10003 list; private items use NIP-44. Saved-list browsing UI and categorized kind-30003 UI are not yet exposed |
+| NIP-73 | External content IDs | — | ✅ NIP-73 web identifiers (k=web, i=normalized URL) used for external reactions and bookmark references |
+| NIP-85 | Trusted assertions | 10040, 30382–30385 | 🚧 shared-core provider validation and platform/personal WoT policy in review |
 | NIP-50 | Search capability | — | ✅ NIP-50 `search` filters on every Nostr read |
 | NIP-54 | Wiki | 30818 | ✅ read — dedicated wiki relay pool (wikistr relays: `relay.wikifreedia.xyz`, `nostr.wine`, `nostr21.com`, `relay.nostr.band`), user-editable in Settings → Wiki Relays |
 | NIP-56 | Reporting | 1984 | ✅ write (Policy page abuse reports, with NIP-32 labels) |
@@ -49,14 +52,13 @@ formats. Current support:
 | NIP-78 | App-specific data | 30078 | ✅ submissions / term signals (read + write) · legacy cache and archived stakes (read-only, see below) |
 | NIP-92 | Media attachments (`imeta`) | 1 | ✅ read (inline thumbnails in results) |
 | NIP-94 | File metadata | 1063 | ✅ read (file results) |
-| NIP-B0 | Web bookmarks | 39701 | ✅ read (Community provider — user-curated links) |
+| NIP-B0 | Web bookmarks | 39701 | ✅ read + write public web bookmarks; public saves create kind 39701 and NIP-51 list membership. Private saves never publish kind 39701 |
 | NIP-C0 | Code snippets | 1337 | ✅ read (Code tab, language badges) |
 | BUD-03 | Blossom user server list | 10063 | ✅ read + write (uploads) |
 | SIP-01 | Search Index Protocol | 39697 | ✅ read + write ([spec](docs/SIP-01.md)) |
 
 Considered and intentionally skipped for now: NIP-5A (nsite hosting — hosting, not
-search), NIP-85 (trusted assertions — needs a provider-selection UX; a natural future
-fit for indexer reputation), NIP-86 (relay operator API),
+search), NIP-85 (trusted assertions — shared-core provider/policy implementation is in review; app-specific provider selectors and admin settings remain future work), NIP-86 (relay operator API),
 NIP-B7 (Blossom URL fallback — uploads already go through Blossom).
 
 ---
