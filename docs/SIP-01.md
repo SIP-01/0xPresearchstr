@@ -67,7 +67,7 @@ nothing else. It does **not** define:
 | Kind | **39697** |
 | Name | Web Index Observation |
 | Range | Addressable (30000–39999, NIP-01 kind-range conventions; formerly NIP-33) |
-| Registry status | Unused by any registered NIP at time of writing (draft allocation) — re-verified against the upstream kind registry in v1.2 |
+| Registry status | Unregistered draft allocation; rechecked against the upstream NIP and kind registries on 2026-11-17 (see §21) |
 
 Addressability is deliberate:
 
@@ -565,7 +565,7 @@ row above states a concrete, audited relationship.
 
 Kind 39697 does not describe agents, tools, or endpoints. ORBSTR publishes
 those as addressable **kind 39698** events, checked unused against
-`nostr-protocol/nips` and `nostr-protocol/registry-of-kinds` on 2026-11-07.
+`nostr-protocol/nips` and `nostr-protocol/registry-of-kinds` on 2026-11-17.
 
 Consumers of this specification MAY ignore §21 entirely. Relays that validate
 kind 39697 MUST keep accepting events that lack `role`, `proto`, and `a`, and
