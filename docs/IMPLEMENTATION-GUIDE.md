@@ -1,7 +1,7 @@
 # SIP-01 Implementation Guide
 
 How to publish to, consume, or relay the shared search index. Everything here is
-normative where it restates [the specification](../public/spec/SIP-01.md) — when in
+normative where it restates [the specification](./SIP-01.md) — when in
 doubt, the spec wins. Section numbers (`§n`) refer to the spec.
 
 > **Rule zero:** byte-compatibility. If your URL normalization or hashing drifts by
@@ -47,14 +47,13 @@ Trust model: signatures prove authorship, not accuracy. Agreement between
 
 ### 1.2 Build the event
 
-The whole algorithm (lift `src/lib/sip01-utils.ts` from this repo — it's the
-byte-compatible browser port of every shipping implementation):
+The implementation in this repository lives in [`src/lib/webIndex.ts`](../src/lib/webIndex.ts). It exposes the normalizer, identity hashes, kind/schema constants, event builder/parser and integrity verifier used by this application:
 
 ```ts
 import {
   normalizeIndexUrl, documentId, contentHash,
-  SIP01_KIND, SIP01_SCHEMA_VERSION,
-} from './sip01-utils';
+  WEB_INDEX_KIND, WEB_INDEX_SCHEMA_VERSION,
+} from '../src/lib/webIndex';
 
 const normalized = normalizeIndexUrl(rawUrl);       // §7 — null if not http(s)
 if (!normalized) return;
@@ -67,13 +66,13 @@ const d = await documentId(normalized);             // §3
 const x = await contentHash(title, description);    // §8
 
 const event = await signer.signEvent({
-  kind: SIP01_KIND,                                 // 39697
+  kind: WEB_INDEX_KIND,                                 // 39697
   content: JSON.stringify({ title, ...(description && { description }) }),
   tags: [
     ['d', d],
     ['u', normalized],                              // ≤ 2048 chars (§5)
     ['x', x],
-    ['v', SIP01_SCHEMA_VERSION],                    // "1"
+    ['v', WEB_INDEX_SCHEMA_VERSION],                    // "1"
     ['alt', `Web index observation: ${title}`],     // ≤ 1000 chars (§5)
     // optional: ['t', topic] × ≤ 8, ['l', 'en'], ['published', unix],
     //           ['source', 'mycrawler/1'], extension tags (§9)…
@@ -124,7 +123,7 @@ counting stays client-side unless the relay advertises an extension for it.
 ### 2.2 Validate (§18)
 
 Drop anything that fails — or use `validateSip01Event()` from
-`src/lib/sip01-utils.ts`, which mirrors the UNCAGED relay's ingestion rules:
+`src/lib/webIndex.ts`, which mirrors the UNCAGED relay's ingestion rules:
 
 1. exactly one `d`, `u`, `v`, `alt`; `v === '1'`;
 2. `u` is http(s) and ≤ 2048 chars;
